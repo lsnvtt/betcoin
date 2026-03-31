@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Dice5, ArrowUp, ArrowDown } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DiceSlider } from '@/components/games/dice-slider';
 import { formatBetCoin, cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface DiceHistory {
   id: number;
@@ -19,6 +20,8 @@ interface DiceHistory {
   won: boolean;
 }
 
+const quickAmounts = ['10', '50', '100', '500', '1000'];
+
 export default function DicePage() {
   const { authenticated, login } = usePrivy();
   const [target, setTarget] = useState(50);
@@ -27,6 +30,7 @@ export default function DicePage() {
   const [rolling, setRolling] = useState(false);
   const [lastRoll, setLastRoll] = useState<number | null>(null);
   const [lastWon, setLastWon] = useState<boolean | null>(null);
+  const [displayNumber, setDisplayNumber] = useState<number | null>(null);
   const [history, setHistory] = useState<DiceHistory[]>([]);
 
   const winChance = isOver ? 100 - target : target - 1;
@@ -44,186 +48,247 @@ export default function DicePage() {
     setLastRoll(null);
     setLastWon(null);
 
-    // Simulate roll (replace with API call)
+    // Animate rolling numbers
+    const rollInterval = setInterval(() => {
+      setDisplayNumber(Math.floor(Math.random() * 100) + 1);
+    }, 80);
+
     setTimeout(() => {
+      clearInterval(rollInterval);
       const roll = Math.floor(Math.random() * 100) + 1;
       const won = isOver ? roll > target : roll < target;
 
       setRolling(false);
       setLastRoll(roll);
+      setDisplayNumber(roll);
       setLastWon(won);
 
       setHistory((prev) => [
         { id: Date.now(), target, isOver, roll, amount, won },
-        ...prev.slice(0, 9),
+        ...prev.slice(0, 19),
       ]);
     }, 1500);
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Dice5 className="h-7 w-7 text-blue-400" />
-          Dice
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-4xl mx-auto"
+    >
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-3xl font-bold flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-betcoin-purple/30 blur-lg" />
+            <Dice5 className="relative h-8 w-8 text-betcoin-purple" />
+          </div>
+          <span className="bg-gradient-to-r from-betcoin-purple to-betcoin-purple-light bg-clip-text text-transparent">
+            Dice
+          </span>
         </h1>
-        <p className="text-gray-400 mt-1">
+        <p className="text-gray-400 mt-2">
           Escolha um alvo e aposte se o dado sera maior ou menor.
         </p>
-      </div>
+      </motion.div>
 
-      <Card>
-        <CardContent>
-          {/* Roll Result */}
-          <div className="flex items-center justify-center py-8">
-            <div
-              className={cn(
-                'w-24 h-24 rounded-2xl flex items-center justify-center text-4xl font-bold transition-all',
-                rolling && 'animate-bounce',
-                lastWon === true && 'bg-betcoin-accent/20 text-betcoin-accent border-2 border-betcoin-accent',
-                lastWon === false && 'bg-red-500/20 text-red-400 border-2 border-red-500',
-                lastWon === null && 'bg-betcoin-secondary text-gray-400 border-2 border-gray-700'
-              )}
-            >
-              {rolling ? '?' : lastRoll ?? '-'}
-            </div>
-          </div>
-
-          {/* Result message */}
-          {lastWon !== null && !rolling && (
-            <div
-              className={cn(
-                'text-center py-3 rounded-lg mb-4',
-                lastWon
-                  ? 'bg-betcoin-accent/10 text-betcoin-accent'
-                  : 'bg-red-500/10 text-red-400'
-              )}
-            >
-              <p className="text-lg font-bold">
-                {lastWon
-                  ? `Voce ganhou ${formatBetCoin(payout)}!`
-                  : 'Voce perdeu! Tente novamente.'}
-              </p>
-              <p className="text-sm">
-                Rolou {lastRoll} - Alvo: {isOver ? 'acima' : 'abaixo'} de {target}
-              </p>
-            </div>
-          )}
-
-          {/* Over/Under toggle */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <button
-              onClick={() => setIsOver(false)}
-              disabled={rolling}
-              className={cn(
-                'rounded-lg p-3 text-center transition-all border-2 flex items-center justify-center gap-2',
-                !isOver
-                  ? 'border-betcoin-primary bg-betcoin-primary/10 text-betcoin-primary'
-                  : 'border-gray-700 bg-betcoin-dark text-gray-400 hover:border-gray-600'
-              )}
-            >
-              <ArrowDown className="h-5 w-5" />
-              <span className="font-medium">Abaixo</span>
-            </button>
-            <button
-              onClick={() => setIsOver(true)}
-              disabled={rolling}
-              className={cn(
-                'rounded-lg p-3 text-center transition-all border-2 flex items-center justify-center gap-2',
-                isOver
-                  ? 'border-betcoin-primary bg-betcoin-primary/10 text-betcoin-primary'
-                  : 'border-gray-700 bg-betcoin-dark text-gray-400 hover:border-gray-600'
-              )}
-            >
-              <ArrowUp className="h-5 w-5" />
-              <span className="font-medium">Acima</span>
-            </button>
-          </div>
-
-          {/* Slider */}
-          <div className="mb-6">
-            <DiceSlider value={target} onChange={setTarget} isOver={isOver} />
-          </div>
-
-          {/* Amount input */}
-          <div className="space-y-2 mb-4">
-            <label className="text-sm text-gray-400">Valor da Aposta</label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                min="1"
-                step="1"
-                disabled={rolling}
-                placeholder="0.00"
-              />
-              <div className="flex gap-1">
-                {['5', '10', '25', '50'].map((val) => (
-                  <Button
-                    key={val}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAmount(val)}
-                    disabled={rolling}
-                    className="text-xs"
-                  >
-                    {val}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Payout info */}
-          <div className="flex justify-between text-sm text-gray-400 mb-4 px-1">
-            <span>Pagamento: {formatBetCoin(payout)}</span>
-            <span>Multiplicador: {multiplier.toFixed(4)}x</span>
-          </div>
-
-          {/* Roll button */}
-          <Button
-            onClick={handleRoll}
-            disabled={rolling || !amount || parseFloat(amount) <= 0}
-            className="w-full h-12 text-lg font-bold"
-          >
-            {rolling
-              ? 'Rolando...'
-              : authenticated
-              ? 'Rolar Dado'
-              : 'Conectar para Jogar'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* History */}
-      {history.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Historico</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="divide-y divide-gray-800">
-              {history.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between py-2"
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Game Area */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card glow="purple">
+            <CardContent>
+              {/* Roll Result Display */}
+              <div className="flex items-center justify-center py-10">
+                <motion.div
+                  animate={{
+                    scale: rolling ? [1, 1.1, 0.95, 1.05, 1] : 1,
+                    rotate: rolling ? [0, 5, -5, 3, 0] : 0,
+                  }}
+                  transition={{
+                    duration: 0.5,
+                    repeat: rolling ? Infinity : 0,
+                    ease: 'easeInOut',
+                  }}
+                  className={cn(
+                    'w-28 h-28 rounded-2xl flex items-center justify-center text-5xl font-black font-mono transition-all border-2',
+                    'bg-white/5 backdrop-blur-xl',
+                    rolling && 'border-betcoin-purple/50 shadow-glow-purple',
+                    lastWon === true && 'border-betcoin-accent/50 shadow-glow-green bg-betcoin-accent/5',
+                    lastWon === false && 'border-betcoin-red/50 shadow-glow-red bg-betcoin-red/5',
+                    lastWon === null && !rolling && 'border-white/10'
+                  )}
                 >
-                  <div className="flex items-center gap-3">
-                    <Badge variant={entry.won ? 'success' : 'destructive'}>
-                      {entry.won ? 'Ganhou' : 'Perdeu'}
-                    </Badge>
-                    <span className="text-sm text-gray-400">
-                      Rolou {entry.roll} ({entry.isOver ? 'acima' : 'abaixo'} de{' '}
-                      {entry.target})
-                    </span>
-                  </div>
-                  <span
+                  <span className={cn(
+                    lastWon === true && 'text-betcoin-accent',
+                    lastWon === false && 'text-betcoin-red-light',
+                    lastWon === null && !rolling && 'text-gray-500',
+                    rolling && 'text-betcoin-purple-light',
+                  )}>
+                    {rolling ? (displayNumber ?? '?') : (lastRoll ?? '-')}
+                  </span>
+                </motion.div>
+              </div>
+
+              {/* Result message */}
+              <AnimatePresence>
+                {lastWon !== null && !rolling && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
                     className={cn(
-                      'text-sm font-medium',
-                      entry.won ? 'text-betcoin-accent' : 'text-red-400'
+                      'text-center py-4 rounded-xl mb-6 border',
+                      lastWon
+                        ? 'bg-betcoin-accent/10 border-betcoin-accent/20'
+                        : 'bg-betcoin-red/10 border-betcoin-red/20'
                     )}
                   >
+                    <p className={cn(
+                      'text-2xl font-bold font-mono',
+                      lastWon ? 'text-betcoin-accent' : 'text-betcoin-red-light'
+                    )}>
+                      {lastWon
+                        ? `+${formatBetCoin(payout - parseFloat(amount))}`
+                        : `-${formatBetCoin(amount)}`}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Rolou {lastRoll} - Alvo: {isOver ? 'acima' : 'abaixo'} de {target}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Over/Under toggle */}
+              <div className="flex bg-white/5 rounded-xl p-1 mb-6 border border-white/10">
+                {[
+                  { value: false, label: 'Abaixo', icon: ArrowDown },
+                  { value: true, label: 'Acima', icon: ArrowUp },
+                ].map((opt) => (
+                  <motion.button
+                    key={opt.label}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setIsOver(opt.value)}
+                    disabled={rolling}
+                    className={cn(
+                      'flex-1 flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-all',
+                      isOver === opt.value
+                        ? 'bg-gradient-to-r from-betcoin-primary to-betcoin-primary-light text-black shadow-glow-orange'
+                        : 'text-gray-400 hover:text-white'
+                    )}
+                  >
+                    <opt.icon className="h-4 w-4" />
+                    {opt.label}
+                  </motion.button>
+                ))}
+              </div>
+
+              {/* Slider */}
+              <div className="mb-8">
+                <DiceSlider value={target} onChange={setTarget} isOver={isOver} />
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-3 mb-6">
+                <label className="text-sm text-gray-400 font-medium">Valor da Aposta</label>
+                <Input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  min="1"
+                  step="1"
+                  disabled={rolling}
+                  placeholder="0.00"
+                  className="font-mono"
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {quickAmounts.map((val) => (
+                    <Button
+                      key={val}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAmount(val)}
+                      disabled={rolling}
+                      className={cn(
+                        'text-xs font-mono',
+                        amount === val && 'border-betcoin-primary/50 text-betcoin-primary'
+                      )}
+                    >
+                      {val}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payout info */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-1">Pagamento</p>
+                  <p className="text-lg font-bold font-mono text-white">
+                    {formatBetCoin(payout)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-1">Multiplicador</p>
+                  <p className="text-lg font-bold font-mono gradient-text">
+                    {multiplier.toFixed(4)}x
+                  </p>
+                </div>
+              </div>
+
+              {/* Roll button */}
+              <Button
+                onClick={handleRoll}
+                disabled={rolling || !amount || parseFloat(amount) <= 0}
+                loading={rolling}
+                variant="purple"
+                size="xl"
+                className="w-full text-lg font-bold"
+              >
+                <Dice5 className="h-5 w-5" />
+                {rolling
+                  ? 'Rolando...'
+                  : authenticated
+                  ? 'Rolar Dado'
+                  : 'Conectar para Jogar'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* History Sidebar */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+            Historico
+          </h3>
+
+          <div className="space-y-2">
+            {history.map((entry) => (
+              <motion.div
+                key={entry.id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="bg-white/5 border border-white/5 rounded-xl px-3 py-2.5"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'text-lg font-bold font-mono',
+                      entry.won ? 'text-betcoin-accent' : 'text-betcoin-red-light'
+                    )}>
+                      {entry.roll}
+                    </span>
+                    <Badge variant={entry.won ? 'win' : 'loss'} className="text-[10px]">
+                      {entry.won ? 'Ganhou' : 'Perdeu'}
+                    </Badge>
+                  </div>
+                  <span className={cn(
+                    'text-xs font-mono font-semibold',
+                    entry.won ? 'text-betcoin-accent' : 'text-betcoin-red-light'
+                  )}>
                     {entry.won
                       ? `+${formatBetCoin(
                           parseFloat(entry.amount) * (98 / (entry.isOver ? 100 - entry.target : entry.target - 1)) - parseFloat(entry.amount)
@@ -231,11 +296,17 @@ export default function DicePage() {
                       : `-${formatBetCoin(entry.amount)}`}
                   </span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+                <p className="text-[10px] text-gray-500">
+                  {entry.isOver ? 'Acima' : 'Abaixo'} de {entry.target}
+                </p>
+              </motion.div>
+            ))}
+            {history.length === 0 && (
+              <p className="text-xs text-gray-600">Nenhuma jogada ainda</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

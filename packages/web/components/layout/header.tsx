@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { shortenAddress, formatBetCoin } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { getBalance } from '@/lib/api';
+import { motion } from 'framer-motion';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -34,33 +35,39 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   const walletAddress = user?.wallet?.address;
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center border-b border-gray-800 bg-betcoin-dark/95 backdrop-blur px-4 lg:px-6">
+    <motion.header
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="sticky top-0 z-40 flex h-16 items-center border-b border-white/5 bg-betcoin-dark/80 backdrop-blur-xl px-4 lg:px-6"
+    >
       <button
         onClick={onToggleSidebar}
-        className="mr-4 lg:hidden text-gray-400 hover:text-white"
+        className="mr-4 lg:hidden text-gray-400 hover:text-white transition-colors"
       >
         <Menu className="h-6 w-6" />
       </button>
 
-      <div className="flex items-center gap-2">
-        <Coins className="h-7 w-7 text-betcoin-primary" />
-        <span className="text-xl font-bold text-white">
-          Bet<span className="text-betcoin-primary">Coin</span>
-        </span>
-      </div>
-
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex items-center gap-3">
         {authenticated && (
-          <div className="hidden sm:flex items-center gap-2 rounded-lg bg-betcoin-secondary px-3 py-2 border border-gray-800">
-            <Wallet className="h-4 w-4 text-betcoin-primary" />
-            <span className="text-sm font-medium text-betcoin-primary">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="hidden sm:flex items-center gap-2 rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 px-4 py-2"
+          >
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-betcoin-primary/30 blur-sm" />
+              <Coins className="relative h-4 w-4 text-betcoin-primary" />
+            </div>
+            <span className="text-sm font-bold font-mono text-betcoin-primary">
               {formatBetCoin(balance)}
             </span>
-          </div>
+          </motion.div>
         )}
 
         {ready && !authenticated && (
-          <Button onClick={login} size="sm">
+          <Button onClick={login} size="md" variant="default">
+            <Wallet className="h-4 w-4" />
             Conectar Carteira
           </Button>
         )}
@@ -68,7 +75,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         {ready && authenticated && (
           <div className="flex items-center gap-2">
             {walletAddress && (
-              <span className="hidden md:inline text-sm text-gray-400">
+              <span className="hidden md:inline text-xs text-gray-500 font-mono bg-white/5 rounded-lg px-3 py-1.5 border border-white/5">
                 {shortenAddress(walletAddress)}
               </span>
             )}
@@ -78,6 +85,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </div>
         )}
       </div>
-    </header>
+    </motion.header>
   );
 }

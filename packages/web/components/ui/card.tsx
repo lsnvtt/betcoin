@@ -1,16 +1,36 @@
+'use client';
+
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 import { type HTMLAttributes, forwardRef } from 'react';
 
-const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(
-        'rounded-xl border border-gray-800 bg-betcoin-secondary p-6',
-        className
-      )}
-      {...props}
-    />
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  glow?: 'orange' | 'green' | 'purple' | 'none';
+}
+
+const Card = forwardRef<HTMLDivElement, CardProps>(
+  ({ className, glow = 'none', children, ...props }, ref) => (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' as const }}
+    >
+      <div
+        ref={ref}
+        className={cn(
+          'bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6',
+          'transition-all duration-300',
+          'hover:border-white/20 hover:bg-white/[0.07]',
+          glow === 'orange' && 'hover:shadow-glow-orange',
+          glow === 'green' && 'hover:shadow-glow-green',
+          glow === 'purple' && 'hover:shadow-glow-purple',
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    </motion.div>
   )
 );
 Card.displayName = 'Card';
@@ -30,7 +50,7 @@ const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingEleme
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn('text-lg font-semibold text-white', className)}
+      className={cn('text-lg font-bold text-white', className)}
       {...props}
     />
   )

@@ -4,47 +4,108 @@
 
 @layer base {
   * {
-    @apply border-gray-800;
+    @apply border-white/10;
+  }
+
+  body {
+    background: #0A0A1B;
   }
 }
 
+@layer utilities {
+  .gradient-text {
+    @apply bg-gradient-to-r from-betcoin-primary to-amber-400 bg-clip-text text-transparent;
+  }
+
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 20px rgba(247, 147, 26, 0.3);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+}
+
+/* 3D Coin Flip */
 @keyframes coin-flip {
   0% {
-    transform: rotateY(0deg);
+    transform: rotateY(0deg) scale(1);
+  }
+  25% {
+    transform: rotateY(450deg) scale(1.1);
+  }
+  50% {
+    transform: rotateY(900deg) scale(1.15);
+  }
+  75% {
+    transform: rotateY(1260deg) scale(1.1);
   }
   100% {
-    transform: rotateY(1800deg);
+    transform: rotateY(1440deg) scale(1);
   }
 }
 
 @keyframes coin-land-heads {
   0% {
-    transform: rotateY(1800deg);
+    transform: rotateY(1440deg) scale(1);
+  }
+  60% {
+    transform: rotateY(-10deg) scale(1.05);
+  }
+  80% {
+    transform: rotateY(5deg) scale(1);
   }
   100% {
-    transform: rotateY(0deg);
+    transform: rotateY(0deg) scale(1);
   }
 }
 
 @keyframes coin-land-tails {
   0% {
-    transform: rotateY(1800deg);
+    transform: rotateY(1440deg) scale(1);
+  }
+  60% {
+    transform: rotateY(170deg) scale(1.05);
+  }
+  80% {
+    transform: rotateY(185deg) scale(1);
   }
   100% {
-    transform: rotateY(180deg);
+    transform: rotateY(180deg) scale(1);
+  }
+}
+
+@keyframes coin-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(247, 147, 26, 0.3), 0 0 40px rgba(247, 147, 26, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(247, 147, 26, 0.6), 0 0 80px rgba(247, 147, 26, 0.3);
   }
 }
 
 .animate-coin-flip {
-  animation: coin-flip 2s ease-in-out;
+  animation: coin-flip 2s cubic-bezier(0.37, 0, 0.63, 1);
 }
 
 .animate-coin-land-heads {
-  animation: coin-land-heads 0.5s ease-out forwards;
+  animation: coin-land-heads 0.6s ease-out forwards;
 }
 
 .animate-coin-land-tails {
-  animation: coin-land-tails 0.5s ease-out forwards;
+  animation: coin-land-tails 0.6s ease-out forwards;
+}
+
+.animate-coin-glow {
+  animation: coin-glow 1s ease-in-out infinite;
 }
 
 .coin-face {
@@ -56,20 +117,106 @@
   transform: rotateY(180deg);
 }
 
+/* Dice Roll */
+@keyframes dice-roll {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.2) rotate(10deg); }
+  50% { transform: scale(0.9) rotate(-5deg); }
+  75% { transform: scale(1.1) rotate(3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.animate-dice-roll {
+  animation: dice-roll 0.5s ease-in-out;
+}
+
+/* Glow Pulse */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(247, 147, 26, 0.5), 0 0 60px rgba(247, 147, 26, 0.2);
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.5);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* Background grid pattern */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0F0F23;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1A1A2E;
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #F7931A;
+  background: rgba(247, 147, 26, 0.5);
+}
+
+/* Range slider for dice */
+input[type='range'].dice-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+}
+
+input[type='range'].dice-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F7931A, #FFB347);
+  border: 3px solid white;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(247, 147, 26, 0.5);
+  position: relative;
+  z-index: 10;
+}
+
+input[type='range'].dice-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F7931A, #FFB347);
+  border: 3px solid white;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(247, 147, 26, 0.5);
 }

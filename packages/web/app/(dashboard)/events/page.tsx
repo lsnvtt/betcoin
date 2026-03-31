@@ -2,14 +2,27 @@
 
 import { useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
-import { Trophy, Search, Clock } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Trophy,
+  Search,
+  Clock,
+  Swords,
+  CircleDot,
+} from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { formatBetCoin, cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const sports = ['Todos', 'Futebol', 'Basquete', 'Tenis', 'MMA'];
+const sports = [
+  { name: 'Todos', icon: Trophy },
+  { name: 'Futebol', icon: CircleDot },
+  { name: 'Basquete', icon: CircleDot },
+  { name: 'Tenis', icon: CircleDot },
+  { name: 'MMA', icon: Swords },
+];
 
 const mockEvents = [
   {
@@ -90,8 +103,7 @@ export default function EventsPage() {
   const [betAmount, setBetAmount] = useState('10');
 
   const filtered = mockEvents.filter((e) => {
-    const matchSport =
-      selectedSport === 'Todos' || e.sport === selectedSport;
+    const matchSport = selectedSport === 'Todos' || e.sport === selectedSport;
     const matchSearch =
       !search ||
       e.homeTeam.toLowerCase().includes(search.toLowerCase()) ||
@@ -115,145 +127,189 @@ export default function EventsPage() {
       login();
       return;
     }
-    // API call would go here
-    alert(
-      `Aposta de ${betAmount} BTC no resultado ${selectedOutcome} do evento ${selectedEvent}`
-    );
+    alert(`Aposta de ${betAmount} BTC no resultado ${selectedOutcome} do evento ${selectedEvent}`);
     setSelectedEvent(null);
     setSelectedOutcome(null);
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Trophy className="h-7 w-7 text-green-400" />
-          Apostas Esportivas
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-6 max-w-5xl mx-auto"
+    >
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1 className="text-3xl font-bold flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-betcoin-accent/30 blur-lg" />
+            <Trophy className="relative h-8 w-8 text-betcoin-accent" />
+          </div>
+          <span className="bg-gradient-to-r from-betcoin-accent to-betcoin-accent-light bg-clip-text text-transparent">
+            Apostas Esportivas
+          </span>
         </h1>
-        <p className="text-gray-400 mt-1">
+        <p className="text-gray-400 mt-2">
           Explore eventos e faca suas apostas.
         </p>
-      </div>
+      </motion.div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="flex flex-col sm:flex-row gap-4"
+      >
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
             placeholder="Buscar evento..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="pl-10"
           />
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {sports.map((sport) => (
             <Button
-              key={sport}
-              variant={selectedSport === sport ? 'default' : 'outline'}
+              key={sport.name}
+              variant={selectedSport === sport.name ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSelectedSport(sport)}
+              onClick={() => setSelectedSport(sport.name)}
+              className="shrink-0"
             >
-              {sport}
+              <sport.icon className="h-3.5 w-3.5" />
+              {sport.name}
             </Button>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       {/* Events list */}
       <div className="space-y-4">
-        {filtered.map((event) => (
-          <Card
+        {filtered.map((event, idx) => (
+          <motion.div
             key={event.id}
-            className={cn(
-              'transition-colors',
-              selectedEvent === event.id && 'border-betcoin-primary'
-            )}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 + idx * 0.05 }}
           >
-            <CardContent>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={event.status === 'live' ? 'live' : 'outline'}
-                  >
-                    {event.status === 'live' ? 'AO VIVO' : event.sport}
-                  </Badge>
-                  <span className="text-sm text-gray-500">{event.league}</span>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <Clock className="h-3 w-3" />
-                  {formatDate(event.startTime)}
-                </div>
-              </div>
-
-              <div className="text-center mb-4">
-                <p className="text-lg font-bold text-white">
-                  {event.homeTeam}{' '}
-                  <span className="text-gray-500 mx-2">vs</span>{' '}
-                  {event.awayTeam}
-                </p>
-              </div>
-
-              {/* Odds buttons */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {event.outcomes.map((outcome, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setSelectedEvent(event.id);
-                      setSelectedOutcome(idx);
-                    }}
-                    className={cn(
-                      'rounded-lg p-3 text-center transition-all border',
-                      selectedEvent === event.id && selectedOutcome === idx
-                        ? 'border-betcoin-primary bg-betcoin-primary/10'
-                        : 'border-gray-700 bg-betcoin-dark hover:border-gray-600'
-                    )}
-                  >
-                    <p className="text-xs text-gray-400">{outcome.name}</p>
-                    <p className="text-lg font-bold text-betcoin-primary">
-                      {outcome.odds.toFixed(2)}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              {/* Bet form (shown when event+outcome selected) */}
-              {selectedEvent === event.id && selectedOutcome !== null && (
-                <div className="mt-4 pt-4 border-t border-gray-800 flex flex-col sm:flex-row gap-3">
-                  <Input
-                    type="number"
-                    value={betAmount}
-                    onChange={(e) => setBetAmount(e.target.value)}
-                    placeholder="Valor"
-                    min="1"
-                    className="sm:w-40"
-                  />
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <span>
-                      Pagamento:{' '}
-                      {formatBetCoin(
-                        parseFloat(betAmount || '0') *
-                          event.outcomes[selectedOutcome].odds
-                      )}
-                    </span>
-                  </div>
-                  <Button onClick={handlePlaceBet} className="sm:ml-auto">
-                    Apostar
-                  </Button>
-                </div>
+            <Card
+              className={cn(
+                'transition-all',
+                selectedEvent === event.id && 'border-betcoin-primary/50 shadow-glow-orange'
               )}
-            </CardContent>
-          </Card>
+            >
+              <CardContent>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={event.status === 'live' ? 'live' : 'outline'}>
+                      {event.status === 'live' ? 'AO VIVO' : event.sport}
+                    </Badge>
+                    <span className="text-sm text-gray-500">{event.league}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Clock className="h-3 w-3" />
+                    {formatDate(event.startTime)}
+                  </div>
+                </div>
+
+                <div className="text-center mb-5">
+                  <p className="text-xl font-bold text-white">
+                    {event.homeTeam}
+                    <span className="text-gray-600 mx-3 text-sm font-normal">vs</span>
+                    {event.awayTeam}
+                  </p>
+                </div>
+
+                {/* Odds buttons */}
+                <div className={cn(
+                  'grid gap-3',
+                  event.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'
+                )}>
+                  {event.outcomes.map((outcome, oidx) => (
+                    <motion.button
+                      key={oidx}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => {
+                        setSelectedEvent(event.id);
+                        setSelectedOutcome(oidx);
+                      }}
+                      className={cn(
+                        'rounded-xl p-4 text-center transition-all border',
+                        selectedEvent === event.id && selectedOutcome === oidx
+                          ? 'border-betcoin-primary bg-betcoin-primary/10 shadow-glow-orange'
+                          : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]'
+                      )}
+                    >
+                      <p className="text-xs text-gray-400 mb-1">{outcome.name}</p>
+                      <p className="text-xl font-bold font-mono text-betcoin-primary">
+                        {outcome.odds.toFixed(2)}
+                      </p>
+                    </motion.button>
+                  ))}
+                </div>
+
+                {/* Bet form */}
+                <AnimatePresence>
+                  {selectedEvent === event.id && selectedOutcome !== null && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-5 pt-5 border-t border-white/5 flex flex-col sm:flex-row gap-3 items-end">
+                        <div className="flex-1 w-full">
+                          <label className="text-xs text-gray-400 mb-1 block">Valor</label>
+                          <Input
+                            type="number"
+                            value={betAmount}
+                            onChange={(e) => setBetAmount(e.target.value)}
+                            placeholder="Valor"
+                            min="1"
+                            className="font-mono"
+                          />
+                        </div>
+                        <div className="text-sm text-gray-400 whitespace-nowrap pb-3">
+                          Pagamento:{' '}
+                          <span className="font-mono font-bold text-white">
+                            {formatBetCoin(
+                              parseFloat(betAmount || '0') * event.outcomes[selectedOutcome].odds
+                            )}
+                          </span>
+                        </div>
+                        <Button onClick={handlePlaceBet} size="lg" className="shrink-0">
+                          Apostar
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
 
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <Trophy className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>Nenhum evento encontrado.</p>
-          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-16"
+          >
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/5 border border-white/10 mb-4">
+              <Trophy className="h-8 w-8 text-gray-600" />
+            </div>
+            <p className="text-gray-500">Nenhum evento encontrado.</p>
+          </motion.div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

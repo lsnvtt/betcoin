@@ -9,188 +9,190 @@ import {
   Trophy,
   TrendingUp,
   ArrowUpRight,
+  Activity,
+  Target,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { formatBetCoin } from '@/lib/utils';
+import { StatCard } from '@/components/ui/stat-card';
+import { formatBetCoin, cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 const quickGames = [
   {
     name: 'CoinFlip',
     href: '/coinflip',
     icon: CircleDot,
-    description: 'Cara ou coroa. 50/50.',
-    color: 'text-yellow-400',
+    description: 'Cara ou coroa. Duplique sua aposta.',
+    gradient: 'from-yellow-500/20 to-betcoin-primary/10',
+    iconColor: 'text-yellow-400',
+    glowColor: 'group-hover:shadow-glow-orange',
   },
   {
     name: 'Dice',
     href: '/dice',
     icon: Dice5,
     description: 'Escolha o alvo e aposte.',
-    color: 'text-blue-400',
-  },
-  {
-    name: 'Esportes',
-    href: '/events',
-    icon: Trophy,
-    description: 'Apostas esportivas ao vivo.',
-    color: 'text-green-400',
+    gradient: 'from-blue-500/20 to-betcoin-purple/10',
+    iconColor: 'text-blue-400',
+    glowColor: 'group-hover:shadow-glow-purple',
   },
 ];
 
 const recentBets = [
-  {
-    id: '1',
-    game: 'CoinFlip',
-    amount: '10.00',
-    result: 'won',
-    payout: '19.60',
-    time: 'Agora',
-  },
-  {
-    id: '2',
-    game: 'Dice',
-    amount: '5.00',
-    result: 'lost',
-    payout: '0',
-    time: '2 min',
-  },
-  {
-    id: '3',
-    game: 'Futebol',
-    amount: '25.00',
-    result: 'pending',
-    payout: '-',
-    time: '10 min',
-  },
+  { id: '1', game: 'CoinFlip', amount: '10.00', result: 'won' as const, payout: '19.60', time: 'Agora' },
+  { id: '2', game: 'Dice', amount: '5.00', result: 'lost' as const, payout: '0', time: '2 min' },
+  { id: '3', game: 'Futebol', amount: '25.00', result: 'pending' as const, payout: '-', time: '10 min' },
+  { id: '4', game: 'CoinFlip', amount: '50.00', result: 'won' as const, payout: '98.00', time: '15 min' },
+  { id: '5', game: 'Dice', amount: '100.00', result: 'lost' as const, payout: '0', time: '22 min' },
 ];
+
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08 },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' as const } },
+};
 
 export default function DashboardPage() {
   const { authenticated } = usePrivy();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-gray-400 mt-1">
-          Bem-vindo ao BetCoin. Sua plataforma de apostas on-chain.
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-8 max-w-7xl mx-auto"
+    >
+      {/* Welcome Banner */}
+      <motion.div variants={item}>
+        <h1 className="text-3xl lg:text-4xl font-bold">
+          <span className="gradient-text">Bem-vindo ao BetCoin</span>
+        </h1>
+        <p className="text-gray-400 mt-2 text-lg">
+          Sua plataforma de apostas on-chain.
         </p>
-      </div>
+      </motion.div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-0">
-            <div className="rounded-lg bg-betcoin-primary/10 p-3">
-              <Coins className="h-6 w-6 text-betcoin-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Saldo</p>
-              <p className="text-xl font-bold text-white">
-                {formatBetCoin(authenticated ? '1250.00' : '0')}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-0">
-            <div className="rounded-lg bg-betcoin-accent/10 p-3">
-              <TrendingUp className="h-6 w-6 text-betcoin-accent" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Lucro Hoje</p>
-              <p className="text-xl font-bold text-betcoin-accent">
-                +{formatBetCoin('45.20')}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-0">
-            <div className="rounded-lg bg-blue-500/10 p-3">
-              <CircleDot className="h-6 w-6 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Apostas Ativas</p>
-              <p className="text-xl font-bold text-white">3</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-0">
-            <div className="rounded-lg bg-purple-500/10 p-3">
-              <Trophy className="h-6 w-6 text-purple-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Taxa de Vitoria</p>
-              <p className="text-xl font-bold text-white">62%</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Saldo"
+          value={formatBetCoin(authenticated ? '1250.00' : '0')}
+          icon={<Coins className="h-5 w-5" />}
+          glowColor="orange"
+          delay={0.1}
+        />
+        <StatCard
+          title="Apostas Ativas"
+          value="3"
+          icon={<Activity className="h-5 w-5" />}
+          glowColor="blue"
+          delay={0.2}
+        />
+        <StatCard
+          title="Total Ganho"
+          value={formatBetCoin('2450.80')}
+          icon={<TrendingUp className="h-5 w-5" />}
+          change={{ value: '+12.5%', positive: true }}
+          glowColor="green"
+          delay={0.3}
+        />
+        <StatCard
+          title="Total Apostado"
+          value={formatBetCoin('8920.00')}
+          icon={<Target className="h-5 w-5" />}
+          glowColor="purple"
+          delay={0.4}
+        />
+      </motion.div>
 
       {/* Quick Games */}
-      <div>
-        <h2 className="text-lg font-semibold text-white mb-4">Jogos Rapidos</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {quickGames.map((game) => (
+      <motion.div variants={item}>
+        <h2 className="text-xl font-bold text-white mb-4">Jogos Rapidos</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {quickGames.map((game, idx) => (
             <Link key={game.name} href={game.href}>
-              <Card className="hover:border-betcoin-primary/50 transition-colors cursor-pointer group">
-                <CardContent className="flex items-center gap-4 pt-0">
-                  <div className="rounded-lg bg-betcoin-secondary p-3 group-hover:bg-betcoin-primary/10 transition-colors">
-                    <game.icon className={`h-8 w-8 ${game.color}`} />
+              <motion.div
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ duration: 0.2 }}
+                className={cn(
+                  'group bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6',
+                  'transition-all duration-300 cursor-pointer',
+                  'hover:border-white/20',
+                  game.glowColor,
+                )}
+              >
+                <div className="flex items-center gap-5">
+                  <div className={cn(
+                    'flex h-14 w-14 items-center justify-center rounded-2xl',
+                    'bg-gradient-to-br', game.gradient,
+                    'border border-white/10'
+                  )}>
+                    <game.icon className={cn('h-7 w-7', game.iconColor)} />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold text-white">{game.name}</h3>
-                    <p className="text-sm text-gray-400">{game.description}</p>
+                    <h3 className="font-bold text-white text-lg">{game.name}</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">{game.description}</p>
                   </div>
                   <ArrowUpRight className="h-5 w-5 text-gray-600 group-hover:text-betcoin-primary transition-colors" />
-                </CardContent>
-              </Card>
+                </div>
+              </motion.div>
             </Link>
           ))}
         </div>
-      </div>
+      </motion.div>
 
-      {/* Recent Bets */}
-      <div>
+      {/* Recent Activity */}
+      <motion.div variants={item}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Apostas Recentes</h2>
+          <h2 className="text-xl font-bold text-white">Atividade Recente</h2>
           <Link
             href="/pools"
-            className="text-sm text-betcoin-primary hover:underline"
+            className="text-sm text-betcoin-primary hover:text-betcoin-primary-light transition-colors"
           >
             Ver todas
           </Link>
         </div>
         <Card>
-          <CardContent className="pt-0">
-            <div className="divide-y divide-gray-800">
-              {recentBets.map((bet) => (
-                <div
+          <CardContent>
+            <div className="divide-y divide-white/5">
+              {recentBets.map((bet, idx) => (
+                <motion.div
                   key={bet.id}
-                  className="flex items-center justify-between py-3"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + idx * 0.05 }}
+                  className="flex items-center justify-between py-3.5"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="text-sm">
-                      <p className="font-medium text-white">{bet.game}</p>
+                    <div className={cn(
+                      'h-2 w-2 rounded-full',
+                      bet.result === 'won' ? 'bg-betcoin-accent' : bet.result === 'lost' ? 'bg-betcoin-red' : 'bg-yellow-500'
+                    )} />
+                    <div>
+                      <p className="font-medium text-white text-sm">{bet.game}</p>
                       <p className="text-gray-500 text-xs">{bet.time}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-400">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-400 font-mono">
                       {formatBetCoin(bet.amount)}
-                    </p>
+                    </span>
                     <Badge
                       variant={
                         bet.result === 'won'
-                          ? 'success'
+                          ? 'win'
                           : bet.result === 'lost'
-                          ? 'destructive'
-                          : 'default'
+                          ? 'loss'
+                          : 'pending'
                       }
                     >
                       {bet.result === 'won'
@@ -200,12 +202,12 @@ export default function DashboardPage() {
                         : 'Pendente'}
                     </Badge>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </CardContent>
         </Card>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
