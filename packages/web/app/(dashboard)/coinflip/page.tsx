@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Coins } from 'lucide-react';
+import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,18 @@ export default function CoinFlipPage() {
   const [result, setResult] = useState<Choice | null>(null);
   const [lastWon, setLastWon] = useState<boolean | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [balance, setBalance] = useState(0);
+  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+
+  useEffect(() => { setBalance(getDemoBalance()); }, []);
+
+  useEffect(() => {
+    const handler = () => setBalance(getDemoBalance());
+    window.addEventListener('demo-balance-changed', handler);
+    return () => window.removeEventListener('demo-balance-changed', handler);
+  }, []);
+
+  const betAmount = parseFloat(amount || '0');
 
   const handleFlip = async () => {
     if (!authenticated) {
@@ -37,14 +50,27 @@ export default function CoinFlipPage() {
       return;
     }
     if (flipping) return;
+    if (betAmount <= 0 || betAmount > balance) return;
 
     setFlipping(true);
     setResult(null);
     setLastWon(null);
+    setBalanceDelta(null);
+
+    // Deduct bet
+    setBalance(adjustDemoBalance(-betAmount));
 
     setTimeout(() => {
       const flipResult: Choice = Math.random() > 0.5 ? 'heads' : 'tails';
       const won = flipResult === choice;
+
+      if (won) {
+        const winAmount = betAmount * 1.96;
+        setBalance(adjustDemoBalance(winAmount));
+        setBalanceDelta(winAmount - betAmount);
+      } else {
+        setBalanceDelta(-betAmount);
+      }
 
       setFlipping(false);
       setResult(flipResult);
@@ -71,13 +97,27 @@ export default function CoinFlipPage() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 rounded-full bg-betcoin-primary/30 blur-lg" />
-            <Coins className="relative h-8 w-8 text-betcoin-primary" />
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-betcoin-primary/30 blur-lg" />
+              <Coins className="relative h-8 w-8 text-betcoin-primary" />
+            </div>
+            <span className="gradient-text">CoinFlip</span>
+          </h1>
+          <div className="text-right">
+            <p className="text-xs text-gray-500">Saldo</p>
+            <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+            <AnimatePresence>
+              {balanceDelta !== null && !flipping && (
+                <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
+                  {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
-          <span className="gradient-text">CoinFlip</span>
-        </h1>
+        </div>
         <p className="text-gray-400 mt-2">
           Escolha cara ou coroa e duplique sua aposta.
         </p>
@@ -199,9 +239,12 @@ export default function CoinFlipPage() {
               </div>
 
               {/* Flip button */}
+              {betAmount > balance && balance > 0 && (
+                <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
+              )}
               <Button
                 onClick={handleFlip}
-                disabled={flipping || !amount || parseFloat(amount) <= 0}
+                disabled={flipping || !amount || betAmount <= 0 || betAmount > balance}
                 loading={flipping}
                 size="xl"
                 className="w-full text-lg font-bold"

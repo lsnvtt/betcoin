@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Bomb, Gem, DollarSign } from 'lucide-react';
+import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatBetCoin, cn } from '@/lib/utils';
@@ -16,11 +17,12 @@ type TileState = 'hidden' | 'gem' | 'mine';
 
 function calcMultiplier(mines: number, revealed: number): number {
   if (revealed === 0) return 1;
+  const houseEdge = 0.98; // 2% house edge
   let mult = 1;
   for (let i = 0; i < revealed; i++) {
     mult *= (TOTAL_TILES - mines - i) > 0 ? (TOTAL_TILES - i) / (TOTAL_TILES - mines - i) : 1;
   }
-  return Math.floor(mult * 100) / 100;
+  return Math.floor(mult * houseEdge * 100) / 100;
 }
 
 function calcNextMultiplier(mines: number, revealed: number): number {
@@ -38,6 +40,18 @@ export default function MinesPage() {
   const [revealedCount, setRevealedCount] = useState(0);
   const [lastResult, setLastResult] = useState<{ won: boolean; payout: number } | null>(null);
   const [history, setHistory] = useState<{ id: number; payout: number }[]>([]);
+  const [balance, setBalance] = useState(0);
+  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+
+  useEffect(() => { setBalance(getDemoBalance()); }, []);
+
+  useEffect(() => {
+    const handler = () => setBalance(getDemoBalance());
+    window.addEventListener('demo-balance-changed', handler);
+    return () => window.removeEventListener('demo-balance-changed', handler);
+  }, []);
+
+  const betAmount = parseFloat(amount || '0');
 
   const multiplier = useMemo(() => calcMultiplier(mineCount, revealedCount), [mineCount, revealedCount]);
   const nextMult = useMemo(() => calcNextMultiplier(mineCount, revealedCount), [mineCount, revealedCount]);
@@ -49,6 +63,12 @@ export default function MinesPage() {
 
   const startGame = useCallback(() => {
     if (!authenticated) { login(); return; }
+    if (betAmount <= 0 || betAmount > getDemoBalance()) return;
+
+    // Deduct bet
+    setBalance(adjustDemoBalance(-betAmount));
+    setBalanceDelta(null);
+
     const mines = new Set<number>();
     while (mines.size < mineCount) {
       mines.add(Math.floor(Math.random() * TOTAL_TILES));
@@ -59,7 +79,7 @@ export default function MinesPage() {
     setPlaying(true);
     setGameOver(false);
     setLastResult(null);
-  }, [authenticated, login, mineCount]);
+  }, [authenticated, login, mineCount, betAmount]);
 
   const revealTile = useCallback((index: number) => {
     if (!playing || gameOver || grid[index] !== 'hidden') return;
@@ -69,8 +89,9 @@ export default function MinesPage() {
       setGrid((prev) => prev.map((_, i) => minePositions.has(i) ? 'mine' : 'gem'));
       setGameOver(true);
       setPlaying(false);
-      const loss = -parseFloat(amount);
+      const loss = -betAmount;
       setLastResult({ won: false, payout: loss });
+      setBalanceDelta(-betAmount);
       setHistory((prev) => [{ id: Date.now(), payout: loss }, ...prev.slice(0, 19)]);
     } else {
       const newRevealed = revealedCount + 1;
@@ -78,24 +99,28 @@ export default function MinesPage() {
       setRevealedCount(newRevealed);
       // Check if all safe tiles revealed
       if (newRevealed === TOTAL_TILES - mineCount) {
-        const payout = parseFloat(amount) * calcMultiplier(mineCount, newRevealed);
+        const payoutAmount = betAmount * calcMultiplier(mineCount, newRevealed);
+        setBalance(adjustDemoBalance(payoutAmount));
+        setBalanceDelta(payoutAmount - betAmount);
         setGameOver(true);
         setPlaying(false);
-        setLastResult({ won: true, payout });
-        setHistory((prev) => [{ id: Date.now(), payout }, ...prev.slice(0, 19)]);
+        setLastResult({ won: true, payout: payoutAmount });
+        setHistory((prev) => [{ id: Date.now(), payout: payoutAmount }, ...prev.slice(0, 19)]);
       }
     }
-  }, [playing, gameOver, grid, minePositions, revealedCount, amount, mineCount]);
+  }, [playing, gameOver, grid, minePositions, revealedCount, amount, mineCount, betAmount]);
 
   const cashOut = useCallback(() => {
     if (!playing || gameOver || revealedCount === 0) return;
-    const payout = parseFloat(amount) * multiplier;
+    const payoutAmount = betAmount * multiplier;
+    setBalance(adjustDemoBalance(payoutAmount));
+    setBalanceDelta(payoutAmount - betAmount);
     setPlaying(false);
     setGameOver(true);
     setGrid((prev) => prev.map((s, i) => s === 'hidden' ? (minePositions.has(i) ? 'mine' : 'gem') : s));
-    setLastResult({ won: true, payout });
-    setHistory((prev) => [{ id: Date.now(), payout }, ...prev.slice(0, 19)]);
-  }, [playing, gameOver, revealedCount, amount, multiplier, minePositions]);
+    setLastResult({ won: true, payout: payoutAmount });
+    setHistory((prev) => [{ id: Date.now(), payout: payoutAmount }, ...prev.slice(0, 19)]);
+  }, [playing, gameOver, revealedCount, betAmount, multiplier, minePositions]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto">
@@ -107,6 +132,18 @@ export default function MinesPage() {
           </div>
           <span className="gradient-text">Mines</span>
         </h1>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Saldo</p>
+          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <AnimatePresence>
+            {balanceDelta !== null && !playing && (
+              <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
+                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
         <p className="text-gray-400 mt-2">Campo minado cripto. Revele gemas e evite as minas.</p>
       </motion.div>
 
@@ -198,8 +235,11 @@ export default function MinesPage() {
             </div>
 
             <div className="flex gap-3">
+              {betAmount > balance && balance > 0 && !playing && (
+                <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
+              )}
               {!playing ? (
-                <Button onClick={startGame} size="xl" className="flex-1 text-lg font-bold">
+                <Button onClick={startGame} disabled={betAmount <= 0 || betAmount > balance} size="xl" className="flex-1 text-lg font-bold">
                   {authenticated ? 'Iniciar Jogo' : 'Conectar para Jogar'}
                 </Button>
               ) : (

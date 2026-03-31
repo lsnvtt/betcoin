@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { TrendingUp, Zap } from 'lucide-react';
+import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatBetCoin, cn } from '@/lib/utils';
@@ -47,10 +48,22 @@ export default function CrashPage() {
   const [history, setHistory] = useState<number[]>([2.34, 1.12, 5.67, 1.01, 3.45, 1.87, 15.2, 1.45, 2.1, 1.03, 4.5, 1.89, 2.78, 1.15, 8.9, 1.33, 3.22, 1.67, 2.01, 1.5]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [shake, setShake] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const startTime = useRef(0);
   const crashRef = useRef(0);
+
+  useEffect(() => { setBalance(getDemoBalance()); }, []);
+
+  useEffect(() => {
+    const handler = () => setBalance(getDemoBalance());
+    window.addEventListener('demo-balance-changed', handler);
+    return () => window.removeEventListener('demo-balance-changed', handler);
+  }, []);
+
+  const betAmount = parseFloat(amount || '0');
 
   const drawChart = useCallback((currentMult: number, isCrashed: boolean) => {
     const canvas = canvasRef.current;
@@ -107,6 +120,12 @@ export default function CrashPage() {
   const startGame = useCallback(() => {
     if (!authenticated) { login(); return; }
     if (status === 'running') return;
+    if (betAmount <= 0 || betAmount > getDemoBalance()) return;
+
+    // Deduct bet
+    setBalance(adjustDemoBalance(-betAmount));
+    setBalanceDelta(null);
+
     const cp = generateCrashPoint();
     crashRef.current = cp;
     setCrashPoint(0);
@@ -128,6 +147,7 @@ export default function CrashPage() {
         setStatus('crashed');
         setShake(true);
         setTimeout(() => setShake(false), 500);
+        setBalanceDelta(-betAmount);
         setHistory((prev) => [crashRef.current, ...prev.slice(0, 19)]);
         drawChart(crashRef.current, true);
         // Auto-cashout bots
@@ -148,6 +168,9 @@ export default function CrashPage() {
       if (acVal > 0 && rounded >= acVal && !cashedOut) {
         setCashedOut(true);
         setCashoutMultiplier(rounded);
+        const winAmount = betAmount * rounded;
+        setBalance(adjustDemoBalance(winAmount));
+        setBalanceDelta(winAmount - betAmount);
       }
 
       // Bot cashouts
@@ -160,7 +183,7 @@ export default function CrashPage() {
       animRef.current = requestAnimationFrame(tick);
     };
     animRef.current = requestAnimationFrame(tick);
-  }, [authenticated, login, status, autoCashout, cashedOut, drawChart]);
+  }, [authenticated, login, status, autoCashout, cashedOut, drawChart, betAmount]);
 
   useEffect(() => {
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
@@ -174,6 +197,9 @@ export default function CrashPage() {
     if (status !== 'running' || cashedOut) return;
     setCashedOut(true);
     setCashoutMultiplier(multiplier);
+    const winAmount = betAmount * multiplier;
+    setBalance(adjustDemoBalance(winAmount));
+    setBalanceDelta(winAmount - betAmount);
   };
 
   const payout = cashedOut ? parseFloat(amount) * cashoutMultiplier : 0;
@@ -188,6 +214,18 @@ export default function CrashPage() {
           </div>
           <span className="gradient-text">Crash</span>
         </h1>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Saldo</p>
+          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <AnimatePresence>
+            {balanceDelta !== null && status !== 'running' && (
+              <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
+                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
         <p className="text-gray-400 mt-2">Aposte e saia antes do crash. Quanto mais alto, maior o risco.</p>
       </motion.div>
 
@@ -247,8 +285,11 @@ export default function CrashPage() {
             </div>
 
             <div className="flex gap-3">
+              {betAmount > balance && balance > 0 && status !== 'running' && (
+                <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
+              )}
               {status !== 'running' ? (
-                <Button onClick={startGame} size="xl" className="flex-1 text-lg font-bold">
+                <Button onClick={startGame} disabled={betAmount <= 0 || betAmount > balance} size="xl" className="flex-1 text-lg font-bold">
                   <Zap className="h-5 w-5 mr-2" />
                   {authenticated ? 'Apostar' : 'Conectar para Jogar'}
                 </Button>

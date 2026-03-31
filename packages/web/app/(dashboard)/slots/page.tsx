@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Sparkles, Zap, RotateCcw } from 'lucide-react';
+import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatBetCoin, cn } from '@/lib/utils';
@@ -76,14 +77,31 @@ export default function SlotsPage() {
   const [history, setHistory] = useState<{ id: number; payout: number }[]>([]);
   const [autoSpins, setAutoSpins] = useState(0);
   const autoRef = useRef(0);
+  const [balance, setBalance] = useState(0);
+  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+
+  useEffect(() => { setBalance(getDemoBalance()); }, []);
+
+  useEffect(() => {
+    const handler = () => setBalance(getDemoBalance());
+    window.addEventListener('demo-balance-changed', handler);
+    return () => window.removeEventListener('demo-balance-changed', handler);
+  }, []);
+
+  const betAmount = parseFloat(amount || '0');
 
   const spin = useCallback(() => {
     if (!authenticated) { login(); return; }
     if (spinning) return;
+    if (betAmount <= 0 || betAmount > getDemoBalance()) return;
     setSpinning(true);
     setWins([]);
     setLastPayout(null);
+    setBalanceDelta(null);
     setColDone([false, false, false]);
+
+    // Deduct bet
+    setBalance(adjustDemoBalance(-betAmount));
 
     const newGrid = generateGrid();
 
@@ -103,12 +121,18 @@ export default function SlotsPage() {
       const w = checkWins(newGrid);
       setWins(w);
       const totalMult = w.reduce((s, x) => s + x.multiplier, 0);
-      const payout = totalMult > 0 ? parseFloat(amount) * totalMult / 10 : 0;
-      setLastPayout(payout > 0 ? payout : -parseFloat(amount));
-      setHistory((prev) => [{ id: Date.now(), payout: payout > 0 ? payout : -parseFloat(amount) }, ...prev.slice(0, 19)]);
+      const payout = totalMult > 0 ? betAmount * totalMult / 10 : 0;
+      if (payout > 0) {
+        setBalance(adjustDemoBalance(payout));
+        setBalanceDelta(payout - betAmount);
+      } else {
+        setBalanceDelta(-betAmount);
+      }
+      setLastPayout(payout > 0 ? payout : -betAmount);
+      setHistory((prev) => [{ id: Date.now(), payout: payout > 0 ? payout : -betAmount }, ...prev.slice(0, 19)]);
       setSpinning(false);
     }, 1800);
-  }, [authenticated, login, spinning, amount]);
+  }, [authenticated, login, spinning, amount, betAmount]);
 
   useEffect(() => {
     autoRef.current = autoSpins;
@@ -137,6 +161,18 @@ export default function SlotsPage() {
           </div>
           <span className="gradient-text">Fortune Crypto</span>
         </h1>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Saldo</p>
+          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <AnimatePresence>
+            {balanceDelta !== null && !spinning && (
+              <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
+                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
         <p className="text-gray-400 mt-2">Slot machine cripto com paylines e multiplicadores. RTP: 96%</p>
       </motion.div>
 
@@ -204,7 +240,10 @@ export default function SlotsPage() {
             </div>
 
             <div className="flex gap-3">
-              <Button onClick={spin} disabled={spinning || !amount || parseFloat(amount) <= 0} loading={spinning} size="xl" className="flex-1 text-lg font-bold">
+              {betAmount > balance && balance > 0 && (
+                <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
+              )}
+              <Button onClick={spin} disabled={spinning || !amount || betAmount <= 0 || betAmount > balance} loading={spinning} size="xl" className="flex-1 text-lg font-bold">
                 {spinning ? 'Girando...' : authenticated ? 'Girar' : 'Conectar para Jogar'}
               </Button>
             </div>

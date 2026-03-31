@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Dice5, ArrowUp, ArrowDown } from 'lucide-react';
+import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,10 +33,21 @@ export default function DicePage() {
   const [lastWon, setLastWon] = useState<boolean | null>(null);
   const [displayNumber, setDisplayNumber] = useState<number | null>(null);
   const [history, setHistory] = useState<DiceHistory[]>([]);
+  const [balance, setBalance] = useState(0);
+  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
 
+  useEffect(() => { setBalance(getDemoBalance()); }, []);
+
+  useEffect(() => {
+    const handler = () => setBalance(getDemoBalance());
+    window.addEventListener('demo-balance-changed', handler);
+    return () => window.removeEventListener('demo-balance-changed', handler);
+  }, []);
+
+  const betAmount = parseFloat(amount || '0');
   const winChance = isOver ? 100 - target : target - 1;
   const multiplier = winChance > 0 ? 98 / winChance : 0;
-  const payout = parseFloat(amount || '0') * multiplier;
+  const payout = betAmount * multiplier;
 
   const handleRoll = async () => {
     if (!authenticated) {
@@ -43,10 +55,15 @@ export default function DicePage() {
       return;
     }
     if (rolling) return;
+    if (betAmount <= 0 || betAmount > balance) return;
 
     setRolling(true);
     setLastRoll(null);
     setLastWon(null);
+    setBalanceDelta(null);
+
+    // Deduct bet
+    setBalance(adjustDemoBalance(-betAmount));
 
     // Animate rolling numbers
     const rollInterval = setInterval(() => {
@@ -57,6 +74,14 @@ export default function DicePage() {
       clearInterval(rollInterval);
       const roll = Math.floor(Math.random() * 100) + 1;
       const won = isOver ? roll > target : roll < target;
+
+      if (won) {
+        const winAmount = betAmount * multiplier;
+        setBalance(adjustDemoBalance(winAmount));
+        setBalanceDelta(winAmount - betAmount);
+      } else {
+        setBalanceDelta(-betAmount);
+      }
 
       setRolling(false);
       setLastRoll(roll);
@@ -91,6 +116,18 @@ export default function DicePage() {
             Dice
           </span>
         </h1>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Saldo</p>
+          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <AnimatePresence>
+            {balanceDelta !== null && !rolling && (
+              <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
+                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
         <p className="text-gray-400 mt-2">
           Escolha um alvo e aposte se o dado sera maior ou menor.
         </p>
@@ -240,9 +277,12 @@ export default function DicePage() {
               </div>
 
               {/* Roll button */}
+              {betAmount > balance && balance > 0 && (
+                <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
+              )}
               <Button
                 onClick={handleRoll}
-                disabled={rolling || !amount || parseFloat(amount) <= 0}
+                disabled={rolling || !amount || betAmount <= 0 || betAmount > balance}
                 loading={rolling}
                 variant="purple"
                 size="xl"
