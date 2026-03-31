@@ -8,13 +8,13 @@ import { Input } from '@/components/ui/input';
 import { formatBetCoin, cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SYMBOLS = ['BTC', 'ETH', 'MATIC', 'Diamond', '7', 'Cherry', 'Bell', 'Star', 'Wild'];
+const SYMBOLS = ['BETC', 'ETH', 'MATIC', 'Diamond', '7', 'Cherry', 'Bell', 'Star', 'Wild'];
 const SYMBOL_DISPLAY: Record<string, string> = {
-  BTC: '₿', ETH: 'Ξ', MATIC: '◈', Diamond: '💎',
+  BETC: '₿', ETH: 'Ξ', MATIC: '◈', Diamond: '💎',
   '7': '7️⃣', Cherry: '🍒', Bell: '🔔', Star: '⭐', Wild: '🪙',
 };
 const PAYOUTS: Record<string, number> = {
-  BTC: 50, ETH: 25, MATIC: 15, Diamond: 100,
+  BETC: 50, ETH: 25, MATIC: 15, Diamond: 100,
   '7': 20, Cherry: 5, Bell: 10, Star: 8, Wild: 0,
 };
 const quickAmounts = ['10', '50', '100', '500', '1000'];

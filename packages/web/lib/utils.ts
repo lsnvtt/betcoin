@@ -7,11 +7,11 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatBetCoin(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '0.00 BTC';
+  if (isNaN(num)) return '0.00 BETC';
   return `${num.toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 6,
-  })} BTC`;
+  })} BETC`;
 }
 
 export function shortenAddress(address: string): string {
