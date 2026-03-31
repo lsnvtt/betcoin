@@ -108,7 +108,7 @@ export default function LiveWinners() {
                 <span className="text-xs text-gray-500">{winner.time}</span>
                 <div className="text-right">
                   <span className="text-green-400 font-bold font-mono">
-                    +{winner.amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} BTC
+                    +{winner.amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} BETC
                   </span>
                   <span className="text-xs text-gray-500 ml-2">{winner.multiplier}x</span>
                 </div>
@@ -159,7 +159,7 @@ export function WinnerToast() {
                 {winner.name} <span className="text-gray-400">acabou de ganhar</span>
               </p>
               <p className="text-green-400 font-bold font-mono text-lg">
-                +{winner.amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} BTC
+                +{winner.amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} BETC
               </p>
               <p className="text-gray-500 text-xs">{winner.game} &bull; {winner.multiplier}x</p>
             </div>

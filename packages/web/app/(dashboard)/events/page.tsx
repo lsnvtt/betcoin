@@ -127,7 +127,7 @@ export default function EventsPage() {
       login();
       return;
     }
-    alert(`Aposta de ${betAmount} BTC no resultado ${selectedOutcome} do evento ${selectedEvent}`);
+    alert(`Aposta de ${betAmount} BETC no resultado ${selectedOutcome} do evento ${selectedEvent}`);
     setSelectedEvent(null);
     setSelectedOutcome(null);
   };

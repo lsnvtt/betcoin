@@ -84,7 +84,7 @@ export default function PoolsPage() {
       login();
       return;
     }
-    alert(`Pool "${newPool.name}" criada com ${newPool.initialLiquidity} BTC`);
+    alert(`Pool "${newPool.name}" criada com ${newPool.initialLiquidity} BETC`);
     setShowCreate(false);
     setNewPool({ name: '', sport: 'Futebol', initialLiquidity: '' });
   };
