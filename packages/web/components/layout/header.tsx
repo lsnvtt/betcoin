@@ -1,20 +1,49 @@
 'use client';
 
 import { usePrivy } from '@privy-io/react-auth';
-import { Coins, LogOut, Wallet, Menu } from 'lucide-react';
+import { Coins, LogOut, Wallet, Menu, Pencil, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { shortenAddress, formatBetCoin } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getBalance } from '@/lib/api';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
 }
 
+function useNickname(walletAddress: string | undefined) {
+  const [nickname, setNickname] = useState<string>('');
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    const stored = localStorage.getItem(`betcoin_nickname_${walletAddress}`);
+    if (stored) setNickname(stored);
+  }, [walletAddress]);
+
+  const saveNickname = (value: string) => {
+    if (!walletAddress) return;
+    const trimmed = value.trim();
+    setNickname(trimmed);
+    if (trimmed) {
+      localStorage.setItem(`betcoin_nickname_${walletAddress}`, trimmed);
+    } else {
+      localStorage.removeItem(`betcoin_nickname_${walletAddress}`);
+    }
+  };
+
+  return { nickname, saveNickname };
+}
+
 export function Header({ onToggleSidebar }: HeaderProps) {
   const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
   const [balance, setBalance] = useState<string>('0');
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const walletAddress = user?.wallet?.address;
+  const { nickname, saveNickname } = useNickname(walletAddress);
 
   useEffect(() => {
     async function fetchBalance() {
@@ -32,7 +61,22 @@ export function Header({ onToggleSidebar }: HeaderProps) {
     fetchBalance();
   }, [authenticated, getAccessToken]);
 
-  const walletAddress = user?.wallet?.address;
+  const displayName = nickname || (walletAddress ? shortenAddress(walletAddress) : '');
+
+  const startEdit = () => {
+    setEditValue(nickname);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const confirmEdit = () => {
+    saveNickname(editValue);
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+  };
 
   return (
     <motion.header
@@ -75,9 +119,48 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         {ready && authenticated && (
           <div className="flex items-center gap-2">
             {walletAddress && (
-              <span className="hidden md:inline text-xs text-gray-500 font-mono bg-white/5 rounded-lg px-3 py-1.5 border border-white/5">
-                {shortenAddress(walletAddress)}
-              </span>
+              <AnimatePresence mode="wait">
+                {editing ? (
+                  <motion.div
+                    key="edit"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="flex items-center gap-1"
+                  >
+                    <input
+                      ref={inputRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') confirmEdit();
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      placeholder="Seu apelido"
+                      maxLength={20}
+                      className="h-7 w-28 rounded-lg border border-white/10 bg-white/5 px-2 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-betcoin-primary/50"
+                    />
+                    <button onClick={confirmEdit} className="text-betcoin-accent hover:text-white transition-colors">
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={cancelEdit} className="text-gray-500 hover:text-white transition-colors">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.button
+                    key="display"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    onClick={startEdit}
+                    className="hidden md:flex items-center gap-1.5 text-xs text-gray-500 font-mono bg-white/5 rounded-lg px-3 py-1.5 border border-white/5 hover:border-white/20 hover:text-white transition-all cursor-pointer"
+                  >
+                    {displayName}
+                    <Pencil className="h-3 w-3 opacity-50" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
             )}
             <Button variant="ghost" size="icon" onClick={logout}>
               <LogOut className="h-4 w-4" />

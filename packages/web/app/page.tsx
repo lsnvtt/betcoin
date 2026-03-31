@@ -419,6 +419,34 @@ export default function Home() {
         </motion.div>
       </section>
 
+      {/* ───── DISCLAIMER ───── */}
+      <Section>
+        <div className="max-w-3xl mx-auto">
+          <div className="glass-card p-8 border-yellow-500/20">
+            <h3 className="text-yellow-400 font-bold text-lg mb-4 flex items-center gap-2">
+              <span className="text-2xl">⚠️</span> Aviso Legal — Leia Antes de Investir
+            </h3>
+            <div className="space-y-3 text-gray-400 text-sm leading-relaxed">
+              <p>
+                <strong className="text-white">Investimento em criptoativos nao e garantia de retorno futuro.</strong> O valor dos tokens BETPASS e BETC pode variar significativamente e voce pode perder parte ou todo o capital investido.
+              </p>
+              <p>
+                Rentabilidades passadas nao sao indicativas de resultados futuros. O revenue share depende do volume de apostas na plataforma, que pode variar.
+              </p>
+              <p>
+                Os valores, projecoes e estimativas apresentados neste site sao meramente ilustrativos e nao constituem promessa ou garantia de rendimento.
+              </p>
+              <p>
+                Antes de investir, avalie cuidadosamente sua situacao financeira e tolerancia a risco. Invista apenas o que voce pode se dar ao luxo de perder.
+              </p>
+              <p className="text-gray-500 text-xs pt-2 border-t border-white/5">
+                BETPASS e um utility token que da direito a participacao nas receitas da plataforma via staking. Nao constitui valor mobiliario, acao ou titulo de divida. A plataforma BetCoin opera na blockchain Polygon e esta sujeita aos riscos inerentes de contratos inteligentes e protocolos descentralizados.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {/* ───── FOOTER ───── */}
       <footer className="border-t border-white/5 py-12 px-4">
         <div className="max-w-5xl mx-auto">
@@ -433,7 +461,7 @@ export default function Home() {
           </div>
           <div className="mt-8 text-center text-xs text-gray-600">
             <p>&copy; 2026 BetCoin. Todos os direitos reservados.</p>
-            <p className="mt-2">Investimento em criptoativos envolve riscos. Faca sua propria pesquisa antes de investir.</p>
+            <p className="mt-2">Investimento em criptoativos envolve riscos significativos. Rentabilidade passada nao e garantia de retorno futuro. Faca sua propria pesquisa (DYOR) antes de investir.</p>
           </div>
         </div>
       </footer>

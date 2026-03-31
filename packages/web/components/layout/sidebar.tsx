@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 import {
   LayoutDashboard,
   CircleDot,
@@ -18,9 +19,12 @@ import {
   Circle,
   Triangle,
   Ticket,
+  Pencil,
+  Check,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, shortenAddress } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
 
 interface NavItem {
   name: string;
@@ -71,6 +75,56 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { user, authenticated } = usePrivy();
+  const walletAddress = user?.wallet?.address;
+
+  const [nickname, setNickname] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    const stored = localStorage.getItem(`betcoin_nickname_${walletAddress}`);
+    if (stored) setNickname(stored);
+  }, [walletAddress]);
+
+  // Listen for storage changes from header
+  useEffect(() => {
+    const handler = () => {
+      if (!walletAddress) return;
+      const stored = localStorage.getItem(`betcoin_nickname_${walletAddress}`);
+      setNickname(stored || '');
+    };
+    window.addEventListener('storage', handler);
+    // Also poll on focus for same-tab updates
+    window.addEventListener('focus', handler);
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener('focus', handler);
+    };
+  }, [walletAddress]);
+
+  const saveNickname = (value: string) => {
+    const trimmed = value.trim();
+    setNickname(trimmed);
+    if (walletAddress) {
+      if (trimmed) {
+        localStorage.setItem(`betcoin_nickname_${walletAddress}`, trimmed);
+      } else {
+        localStorage.removeItem(`betcoin_nickname_${walletAddress}`);
+      }
+    }
+    setEditing(false);
+  };
+
+  const startEdit = () => {
+    setEditValue(nickname);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const displayName = nickname || (walletAddress ? shortenAddress(walletAddress) : '');
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
@@ -146,8 +200,42 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <Wallet className="h-4 w-4 text-betcoin-purple" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-gray-500">Rede</p>
-            <p className="text-sm font-medium text-white truncate">Polygon</p>
+            {authenticated && walletAddress ? (
+              <>
+                {editing ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      ref={inputRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveNickname(editValue);
+                        if (e.key === 'Escape') setEditing(false);
+                      }}
+                      placeholder="Apelido"
+                      maxLength={20}
+                      className="h-6 w-full rounded border border-white/10 bg-white/5 px-1.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-betcoin-primary/50"
+                    />
+                    <button onClick={() => saveNickname(editValue)} className="text-betcoin-accent hover:text-white shrink-0">
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                    <button onClick={startEdit} className="text-gray-500 hover:text-white shrink-0 transition-colors">
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500">Polygon</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">Rede</p>
+                <p className="text-sm font-medium text-white truncate">Polygon</p>
+              </>
+            )}
           </div>
         </div>
       </div>
