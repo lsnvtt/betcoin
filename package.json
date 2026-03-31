@@ -1,0 +1,23 @@
+{
+  "name": "betcoin",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "agentic-flow": "^2.0.7"
+  },
+  "packageManager": "npm@10.8.2"
+}

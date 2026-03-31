@@ -1,0 +1,40 @@
+node_modules/
+dist/
+.next/
+out/
+
+# Foundry
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/lib/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turbo
+.turbo/
+
+# Prisma
+packages/server/prisma/migrations/
+
+# Claude Flow (dev tooling)
+.claude-flow/
+.swarm/
+.claude/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

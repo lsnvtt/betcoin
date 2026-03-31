@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint server
+        run: npm run lint --workspace=@betcoin/server
+
+      - name: Lint web
+        run: npm run lint --workspace=@betcoin/web
+
+      - name: Test server
+        run: npm run test --workspace=@betcoin/server
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build contracts
+        working-directory: packages/contracts
+        run: forge build
+
+      - name: Test contracts
+        working-directory: packages/contracts
+        run: forge test -vvv
+
+      - name: Check formatting
+        working-directory: packages/contracts
+        run: forge fmt --check
