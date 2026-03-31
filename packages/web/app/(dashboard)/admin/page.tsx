@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck, BarChart3, Users, Gamepad2, DollarSign, Settings } from 'lucide-react';
+import { ShieldCheck, BarChart3, Users, Gamepad2, DollarSign, Settings, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { usePrivy } from '@privy-io/react-auth';
+import { isAdmin } from '@/lib/auth';
 import { OverviewTab } from '@/components/admin/overview-tab';
 import { UsersTab } from '@/components/admin/users-tab';
 import { GamesTab } from '@/components/admin/games-tab';
@@ -30,6 +32,26 @@ const item = {
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('overview');
+  const { user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
+
+  if (!isAdmin(walletAddress)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
+          <Lock className="w-10 h-10 text-red-400" />
+        </div>
+        <h1 className="text-2xl font-bold text-white mb-2">Acesso Restrito</h1>
+        <p className="text-gray-400 max-w-md">
+          Esta area e exclusiva para administradores da plataforma.
+          Conecte a wallet autorizada para acessar.
+        </p>
+        {walletAddress && (
+          <p className="mt-4 text-xs text-gray-600 font-mono">{walletAddress}</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 max-w-7xl mx-auto">
