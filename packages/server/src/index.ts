@@ -6,6 +6,7 @@ import { withdrawRoutes } from './routes/withdraw.js';
 import { eventsRoutes } from './routes/events.js';
 import { betsRoutes } from './routes/bets.js';
 import { gamesRoutes } from './routes/games.js';
+import { balanceRoutes } from './routes/balance.js';
 import { poolsRoutes } from './routes/pools.js';
 import { adminRoutes } from './routes/admin.js';
 
@@ -31,6 +32,7 @@ await app.register(withdrawRoutes);
 await app.register(eventsRoutes);
 await app.register(betsRoutes);
 await app.register(gamesRoutes);
+await app.register(balanceRoutes);
 await app.register(poolsRoutes);
 await app.register(adminRoutes);
 

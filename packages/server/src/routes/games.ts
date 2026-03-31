@@ -2,18 +2,61 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authMiddleware } from '../lib/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { GameType as PrismaGameType } from '@prisma/client';
+import * as gameService from '../services/game.service.js';
 
-const coinflipPrepareSchema = z.object({
-  poolId: z.string().min(1),
-  amount: z.number().positive(),
-  choice: z.enum(['HEADS', 'TAILS']),
+// ─── Validation schemas ─────────────────────────────────────────────
+
+const gameTypeParam = z.enum([
+  'coinflip',
+  'dice',
+  'mines',
+  'slots',
+  'crash',
+  'roulette',
+  'plinko',
+]);
+
+const startGameSchema = z.object({
+  betAmount: z.number().positive().max(1_000_000),
+  clientSeed: z.string().max(64).optional(),
 });
 
-const dicePrepareSchema = z.object({
-  poolId: z.string().min(1),
-  amount: z.number().positive(),
-  target: z.number().int().min(1).max(6),
-  over: z.boolean(),
+const coinflipParams = startGameSchema.extend({
+  chosenSide: z.number().int().min(0).max(1),
+});
+
+const diceParams = startGameSchema.extend({
+  target: z.number().int().min(1).max(98),
+  isOver: z.boolean(),
+});
+
+const minesParams = startGameSchema.extend({
+  mineCount: z.number().int().min(1).max(24),
+});
+
+const slotsParams = startGameSchema;
+
+const rouletteParams = startGameSchema.extend({
+  betType: z.enum(['number', 'red', 'black', 'even', 'odd', 'high', 'low']),
+  betValue: z.union([z.number(), z.string()]).optional(),
+});
+
+const crashParams = startGameSchema;
+
+const plinkoParams = startGameSchema.extend({
+  rows: z.number().int().min(8).max(16).default(12),
+});
+
+const actionSchema = z.object({
+  sessionId: z.string().uuid(),
+  action: z.string().min(1),
+  tileIndex: z.number().int().min(0).max(24).optional(),
+  cashoutMultiplier: z.number().positive().optional(),
+});
+
+const cashoutSchema = z.object({
+  sessionId: z.string().uuid(),
 });
 
 const historySchema = z.object({
@@ -21,200 +64,306 @@ const historySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+// ─── Helper ─────────────────────────────────────────────────────────
+
+function parseGameType(raw: string): z.infer<typeof gameTypeParam> | null {
+  const parsed = gameTypeParam.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+function getParamsSchema(gameType: string) {
+  switch (gameType) {
+    case 'coinflip':
+      return coinflipParams;
+    case 'dice':
+      return diceParams;
+    case 'mines':
+      return minesParams;
+    case 'slots':
+      return slotsParams;
+    case 'roulette':
+      return rouletteParams;
+    case 'crash':
+      return crashParams;
+    case 'plinko':
+      return plinkoParams;
+    default:
+      return startGameSchema;
+  }
+}
+
+// ─── Routes ─────────────────────────────────────────────────────────
+
 export async function gamesRoutes(app: FastifyInstance) {
   /**
-   * POST /api/games/coinflip/prepare - Prepare coinflip transaction.
+   * POST /api/games/:gameType/start
+   * Creates a game session, deducts balance, returns serverSeedHash.
    */
-  app.post('/api/games/coinflip/prepare', { preHandler: [authMiddleware] }, async (request, reply) => {
-    const parsed = coinflipPrepareSchema.safeParse(request.body);
-
-    if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation Error',
-        details: parsed.error.issues,
-      });
-    }
-
-    const { poolId, amount, choice } = parsed.data;
-
-    try {
-      const pool = await prisma.pool.findUnique({ where: { id: poolId } });
-      if (!pool || !pool.active) {
-        return reply.status(404).send({ error: 'Pool not found or inactive' });
+  app.post(
+    '/api/games/:gameType/start',
+    { preHandler: [authMiddleware] },
+    async (request, reply) => {
+      const { gameType } = request.params as { gameType: string };
+      const gt = parseGameType(gameType);
+      if (!gt) {
+        return reply.status(400).send({ error: 'Invalid game type' });
       }
 
-      if (amount < Number(pool.minBetAmount)) {
-        return reply.status(400).send({ error: `Minimum bet is ${pool.minBetAmount}` });
-      }
-      if (amount > Number(pool.maxBetAmount)) {
-        return reply.status(400).send({ error: `Maximum bet is ${pool.maxBetAmount}` });
+      const schema = getParamsSchema(gt);
+      const parsed = schema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: 'Validation Error', details: parsed.error.issues });
       }
 
-      const odds = 1.98; // 2x minus 1% house edge
-      const potentialPayout = amount * odds;
+      const { betAmount, clientSeed, ...rest } = parsed.data as Record<
+        string,
+        unknown
+      > & { betAmount: number; clientSeed?: string };
 
-      return reply.status(200).send({
-        txData: {
-          to: pool.contractAddress,
-          poolId,
-          gameType: 'COINFLIP',
-          outcome: choice === 'HEADS' ? 0 : 1,
-          amount: amount.toString(),
-          odds: odds.toString(),
-          potentialPayout: potentialPayout.toString(),
-          gameData: { choice },
-          deadline: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        },
-      });
-    } catch (err) {
-      request.log.error(err, 'Prepare coinflip failed');
-      return reply.status(500).send({ error: 'Internal Server Error' });
-    }
-  });
+      try {
+        const result = await gameService.startGame({
+          gameType: gt,
+          userId: request.user!.id,
+          walletAddress: request.user!.walletAddress,
+          betAmount,
+          clientSeed: clientSeed as string | undefined,
+          gameParams: rest,
+        });
+
+        return reply.status(200).send(result);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Internal Server Error';
+        if (message === 'Insufficient balance') {
+          return reply.status(400).send({ error: message });
+        }
+        request.log.error(err, 'Start game failed');
+        return reply.status(500).send({ error: 'Internal Server Error' });
+      }
+    },
+  );
 
   /**
-   * GET /api/games/coinflip/history - Coinflip game history for the user.
+   * POST /api/games/:gameType/action
+   * In-game action (e.g., reveal tile in mines, cashout in crash).
    */
-  app.get('/api/games/coinflip/history', { preHandler: [authMiddleware] }, async (request, reply) => {
-    const parsed = historySchema.safeParse(request.query);
+  app.post(
+    '/api/games/:gameType/action',
+    { preHandler: [authMiddleware] },
+    async (request, reply) => {
+      const { gameType } = request.params as { gameType: string };
+      const gt = parseGameType(gameType);
+      if (!gt) {
+        return reply.status(400).send({ error: 'Invalid game type' });
+      }
 
-    if (!parsed.success) {
-      return reply.status(400).send({ error: 'Validation Error', details: parsed.error.issues });
-    }
+      const parsed = actionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: 'Validation Error', details: parsed.error.issues });
+      }
 
-    const { page, limit } = parsed.data;
-    const skip = (page - 1) * limit;
+      const { sessionId, action, tileIndex, cashoutMultiplier } = parsed.data;
 
-    try {
-      const [bets, total] = await Promise.all([
-        prisma.bet.findMany({
-          where: { userId: request.user!.id, gameType: 'COINFLIP' },
-          orderBy: { placedAt: 'desc' },
-          skip,
-          take: limit,
-        }),
-        prisma.bet.count({
-          where: { userId: request.user!.id, gameType: 'COINFLIP' },
-        }),
-      ]);
+      try {
+        // Verify session belongs to user
+        const session = await gameService.getSession(sessionId);
+        if (!session || session.userId !== request.user!.id) {
+          return reply.status(404).send({ error: 'Session not found' });
+        }
+        if (session.game !== gt) {
+          return reply
+            .status(400)
+            .send({ error: 'Game type mismatch for session' });
+        }
 
-      return reply.status(200).send({
-        games: bets.map((b) => ({
-          id: b.id,
-          amount: b.amount.toString(),
-          odds: b.odds.toString(),
-          potentialPayout: b.potentialPayout.toString(),
-          actualPayout: b.actualPayout?.toString() ?? null,
-          status: b.status,
-          gameData: b.gameData,
-          placedAt: b.placedAt,
-          settledAt: b.settledAt,
-        })),
-        pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-      });
-    } catch (err) {
-      request.log.error(err, 'Coinflip history failed');
-      return reply.status(500).send({ error: 'Internal Server Error' });
-    }
-  });
+        let result: unknown;
+
+        if (gt === 'mines' && action === 'reveal') {
+          if (tileIndex === undefined) {
+            return reply
+              .status(400)
+              .send({ error: 'tileIndex required for mines reveal' });
+          }
+          result = await gameService.minesReveal(sessionId, tileIndex);
+        } else if (gt === 'crash' && action === 'cashout') {
+          if (!cashoutMultiplier) {
+            return reply
+              .status(400)
+              .send({ error: 'cashoutMultiplier required for crash cashout' });
+          }
+          result = await gameService.crashAction(sessionId, cashoutMultiplier);
+        } else {
+          return reply
+            .status(400)
+            .send({ error: `Unknown action '${action}' for game '${gt}'` });
+        }
+
+        return reply.status(200).send(result);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Internal Server Error';
+        const clientErrors = [
+          'Session not found',
+          'Game is not active',
+          'Tile already revealed',
+          'Invalid tile index',
+          'Must reveal at least one tile before cashing out',
+        ];
+        if (clientErrors.includes(message)) {
+          return reply.status(400).send({ error: message });
+        }
+        request.log.error(err, 'Game action failed');
+        return reply.status(500).send({ error: 'Internal Server Error' });
+      }
+    },
+  );
 
   /**
-   * POST /api/games/dice/prepare - Prepare dice transaction.
+   * POST /api/games/:gameType/cashout
+   * Cash out of an active game (mines, crash, plinko).
    */
-  app.post('/api/games/dice/prepare', { preHandler: [authMiddleware] }, async (request, reply) => {
-    const parsed = dicePrepareSchema.safeParse(request.body);
-
-    if (!parsed.success) {
-      return reply.status(400).send({
-        error: 'Validation Error',
-        details: parsed.error.issues,
-      });
-    }
-
-    const { poolId, amount, target, over } = parsed.data;
-
-    try {
-      const pool = await prisma.pool.findUnique({ where: { id: poolId } });
-      if (!pool || !pool.active) {
-        return reply.status(404).send({ error: 'Pool not found or inactive' });
+  app.post(
+    '/api/games/:gameType/cashout',
+    { preHandler: [authMiddleware] },
+    async (request, reply) => {
+      const { gameType } = request.params as { gameType: string };
+      const gt = parseGameType(gameType);
+      if (!gt) {
+        return reply.status(400).send({ error: 'Invalid game type' });
       }
 
-      if (amount < Number(pool.minBetAmount)) {
-        return reply.status(400).send({ error: `Minimum bet is ${pool.minBetAmount}` });
+      const parsed = cashoutSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: 'Validation Error', details: parsed.error.issues });
       }
-      if (amount > Number(pool.maxBetAmount)) {
-        return reply.status(400).send({ error: `Maximum bet is ${pool.maxBetAmount}` });
+
+      try {
+        const session = await gameService.getSession(parsed.data.sessionId);
+        if (!session || session.userId !== request.user!.id) {
+          return reply.status(404).send({ error: 'Session not found' });
+        }
+        if (session.game !== gt) {
+          return reply
+            .status(400)
+            .send({ error: 'Game type mismatch for session' });
+        }
+
+        const result = await gameService.cashout(parsed.data.sessionId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Internal Server Error';
+        const clientErrors = [
+          'Session not found',
+          'Game is not active',
+          'Game seed expired',
+          'Must reveal at least one tile before cashing out',
+        ];
+        if (clientErrors.includes(message)) {
+          return reply.status(400).send({ error: message });
+        }
+        request.log.error(err, 'Cashout failed');
+        return reply.status(500).send({ error: 'Internal Server Error' });
       }
-
-      // Calculate odds based on probability
-      const winningNumbers = over ? 6 - target : target;
-      const probability = winningNumbers / 6;
-      const odds = (1 / probability) * 0.99; // 1% house edge
-
-      const potentialPayout = amount * odds;
-
-      return reply.status(200).send({
-        txData: {
-          to: pool.contractAddress,
-          poolId,
-          gameType: 'DICE',
-          outcome: target,
-          amount: amount.toString(),
-          odds: odds.toFixed(4),
-          potentialPayout: potentialPayout.toFixed(4),
-          gameData: { target, over },
-          deadline: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        },
-      });
-    } catch (err) {
-      request.log.error(err, 'Prepare dice failed');
-      return reply.status(500).send({ error: 'Internal Server Error' });
-    }
-  });
+    },
+  );
 
   /**
-   * GET /api/games/dice/history - Dice game history for the user.
+   * GET /api/games/:gameType/verify/:sessionId
+   * Provably fair verification — anyone can verify the result was fair.
    */
-  app.get('/api/games/dice/history', { preHandler: [authMiddleware] }, async (request, reply) => {
-    const parsed = historySchema.safeParse(request.query);
+  app.get(
+    '/api/games/:gameType/verify/:sessionId',
+    async (request, reply) => {
+      const { sessionId } = request.params as { sessionId: string };
 
-    if (!parsed.success) {
-      return reply.status(400).send({ error: 'Validation Error', details: parsed.error.issues });
-    }
+      const uuidSchema = z.string().uuid();
+      if (!uuidSchema.safeParse(sessionId).success) {
+        return reply.status(400).send({ error: 'Invalid session ID' });
+      }
 
-    const { page, limit } = parsed.data;
-    const skip = (page - 1) * limit;
+      try {
+        const result = await gameService.verifyGame(sessionId);
+        return reply.status(200).send(result);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Internal Server Error';
+        if (message === 'Session not found') {
+          return reply.status(404).send({ error: message });
+        }
+        request.log.error(err, 'Verify failed');
+        return reply.status(500).send({ error: 'Internal Server Error' });
+      }
+    },
+  );
 
-    try {
-      const [bets, total] = await Promise.all([
-        prisma.bet.findMany({
-          where: { userId: request.user!.id, gameType: 'DICE' },
-          orderBy: { placedAt: 'desc' },
-          skip,
-          take: limit,
-        }),
-        prisma.bet.count({
-          where: { userId: request.user!.id, gameType: 'DICE' },
-        }),
-      ]);
+  /**
+   * GET /api/games/:gameType/history
+   * Game history for the authenticated user (from Prisma).
+   */
+  app.get(
+    '/api/games/:gameType/history',
+    { preHandler: [authMiddleware] },
+    async (request, reply) => {
+      const { gameType } = request.params as { gameType: string };
+      const gt = parseGameType(gameType);
+      if (!gt) {
+        return reply.status(400).send({ error: 'Invalid game type' });
+      }
 
-      return reply.status(200).send({
-        games: bets.map((b) => ({
-          id: b.id,
-          amount: b.amount.toString(),
-          odds: b.odds.toString(),
-          potentialPayout: b.potentialPayout.toString(),
-          actualPayout: b.actualPayout?.toString() ?? null,
-          status: b.status,
-          gameData: b.gameData,
-          placedAt: b.placedAt,
-          settledAt: b.settledAt,
-        })),
-        pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-      });
-    } catch (err) {
-      request.log.error(err, 'Dice history failed');
-      return reply.status(500).send({ error: 'Internal Server Error' });
-    }
-  });
+      const parsed = historySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: 'Validation Error', details: parsed.error.issues });
+      }
+
+      const { page, limit } = parsed.data;
+      const skip = (page - 1) * limit;
+
+      try {
+        const [bets, total] = await Promise.all([
+          prisma.bet.findMany({
+            where: {
+              userId: request.user!.id,
+              gameType: gt.toUpperCase() as PrismaGameType,
+            },
+            orderBy: { placedAt: 'desc' },
+            skip,
+            take: limit,
+          }),
+          prisma.bet.count({
+            where: {
+              userId: request.user!.id,
+              gameType: gt.toUpperCase() as PrismaGameType,
+            },
+          }),
+        ]);
+
+        return reply.status(200).send({
+          games: bets.map((b) => ({
+            id: b.id,
+            amount: b.amount.toString(),
+            odds: b.odds.toString(),
+            potentialPayout: b.potentialPayout.toString(),
+            actualPayout: b.actualPayout?.toString() ?? null,
+            status: b.status,
+            gameData: b.gameData,
+            placedAt: b.placedAt,
+            settledAt: b.settledAt,
+          })),
+          pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+        });
+      } catch (err) {
+        request.log.error(err, 'Game history failed');
+        return reply.status(500).send({ error: 'Internal Server Error' });
+      }
+    },
+  );
 }
