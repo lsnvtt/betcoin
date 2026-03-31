@@ -4,12 +4,16 @@ import { PrivyProvider } from '@privy-io/react-auth';
 import { WagmiProvider, createConfig } from '@privy-io/wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
-import { polygon } from 'viem/chains';
+import { polygon, polygonAmoy } from 'viem/chains';
 import { useState, type ReactNode } from 'react';
 
+const isTestnet = process.env.NODE_ENV !== 'production';
+const activeChain = isTestnet ? polygonAmoy : polygon;
+
 const wagmiConfig = createConfig({
-  chains: [polygon],
+  chains: [activeChain],
   transports: {
+    [polygonAmoy.id]: http('https://rpc-amoy.polygon.technology'),
     [polygon.id]: http(),
   },
 });
@@ -26,8 +30,8 @@ export function Providers({ children }: { children: ReactNode }) {
           accentColor: '#F7931A',
         },
         loginMethods: ['email', 'wallet', 'google'],
-        defaultChain: polygon,
-        supportedChains: [polygon],
+        defaultChain: activeChain,
+        supportedChains: [polygonAmoy, polygon],
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets',

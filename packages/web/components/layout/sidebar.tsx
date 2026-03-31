@@ -12,17 +12,40 @@ import {
   X,
   Coins,
   Wallet,
+  Sparkles,
+  TrendingUp,
+  Bomb,
+  Circle,
+  Triangle,
+  Ticket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  badge?: string;
+}
+
+interface NavGroup {
+  section: string;
+  items: NavItem[];
+}
+
+const navigation: NavGroup[] = [
   {
     section: 'Jogos',
     items: [
       { name: 'Dashboard', href: '/', icon: LayoutDashboard },
       { name: 'CoinFlip', href: '/coinflip', icon: CircleDot },
       { name: 'Dice', href: '/dice', icon: Dice5 },
+      { name: 'Slots', href: '/slots', icon: Sparkles, badge: 'Novo' },
+      { name: 'Crash', href: '/crash', icon: TrendingUp, badge: 'Novo' },
+      { name: 'Mines', href: '/mines', icon: Bomb, badge: 'Novo' },
+      { name: 'Roleta', href: '/roulette', icon: Circle, badge: 'Novo' },
+      { name: 'Plinko', href: '/plinko', icon: Triangle, badge: 'Novo' },
     ],
   },
   {
@@ -36,6 +59,7 @@ const navigation = [
     items: [
       { name: 'Minha Banca', href: '/pools', icon: Landmark },
       { name: 'Admin', href: '/admin', icon: ShieldCheck },
+      { name: 'BETPASS', href: '/betpass', icon: Ticket },
     ],
   },
 ];
@@ -101,6 +125,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                     >
                       <item.icon className={cn('h-5 w-5 shrink-0', isActive && 'text-betcoin-primary')} />
                       {item.name}
+                      {item.badge && (
+                        <span className="ml-auto text-[9px] font-bold uppercase bg-betcoin-primary/20 text-betcoin-primary px-1.5 py-0.5 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
                     </motion.div>
                   </Link>
                 );
