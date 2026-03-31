@@ -1,11 +1,11 @@
 'use client';
 
 import { usePrivy } from '@privy-io/react-auth';
-import { Coins, LogOut, Wallet, Menu, Pencil, Check, X } from 'lucide-react';
+import { Coins, LogOut, Wallet, Menu, Pencil, Check, X, Droplets } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { shortenAddress, formatBetCoin } from '@/lib/utils';
-import { useState, useEffect, useRef } from 'react';
-import { getBalance } from '@/lib/api';
+import { shortenAddress } from '@/lib/utils';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { getDemoBalance, resetDemoBalance } from '@/lib/game-config';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface HeaderProps {
@@ -37,29 +37,38 @@ function useNickname(walletAddress: string | undefined) {
 
 export function Header({ onToggleSidebar }: HeaderProps) {
   const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
-  const [balance, setBalance] = useState<string>('0');
+  const [balance, setBalance] = useState<number>(0);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [faucetUsed, setFaucetUsed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const walletAddress = user?.wallet?.address;
   const { nickname, saveNickname } = useNickname(walletAddress);
 
+  const refreshBalance = useCallback(() => {
+    setBalance(getDemoBalance());
+  }, []);
+
   useEffect(() => {
-    async function fetchBalance() {
-      if (!authenticated) return;
-      try {
-        const token = await getAccessToken();
-        if (token) {
-          const data = await getBalance(token);
-          setBalance(data.balance);
-        }
-      } catch {
-        // Backend not available yet
-      }
-    }
-    fetchBalance();
-  }, [authenticated, getAccessToken]);
+    refreshBalance();
+    const handler = () => refreshBalance();
+    window.addEventListener('demo-balance-changed', handler);
+    window.addEventListener('storage', handler);
+    const interval = setInterval(refreshBalance, 1000);
+    return () => {
+      window.removeEventListener('demo-balance-changed', handler);
+      window.removeEventListener('storage', handler);
+      clearInterval(interval);
+    };
+  }, [refreshBalance]);
+
+  const handleFaucet = () => {
+    resetDemoBalance();
+    refreshBalance();
+    setFaucetUsed(true);
+    setTimeout(() => setFaucetUsed(false), 2000);
+  };
 
   const displayName = nickname || (walletAddress ? shortenAddress(walletAddress) : '');
 
@@ -104,9 +113,27 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               <Coins className="relative h-4 w-4 text-betcoin-primary" />
             </div>
             <span className="text-sm font-bold font-mono text-betcoin-primary">
-              {formatBetCoin(balance)}
+              {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} BETC
             </span>
           </motion.div>
+        )}
+
+        {authenticated && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleFaucet}
+            className={`hidden sm:flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 ${
+              faucetUsed
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                : 'bg-betcoin-accent/10 text-betcoin-accent border border-betcoin-accent/20 hover:bg-betcoin-accent/20'
+            }`}
+          >
+            <Droplets className="h-3.5 w-3.5" />
+            {faucetUsed ? '+10.000 BETC!' : 'Faucet Demo'}
+          </motion.button>
         )}
 
         {ready && !authenticated && (
