@@ -1,83 +1,50 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
-import { Sparkles, Zap, RotateCcw } from 'lucide-react';
 import { startGame, getBalance } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { formatUSDT, cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const SYMBOLS = ['USDT', 'ETH', 'MATIC', 'Diamond', '7', 'Cherry', 'Bell', 'Star', 'Wild'];
-const SYMBOL_DISPLAY: Record<string, string> = {
-  USDT: '$', ETH: 'E', MATIC: 'M', Diamond: 'D',
-  '7': '7', Cherry: 'C', Bell: 'B', Star: 'S', Wild: 'W',
-};
-const PAYOUTS: Record<string, number> = {
-  USDT: 50, ETH: 25, MATIC: 15, Diamond: 100,
-  '7': 20, Cherry: 5, Bell: 10, Star: 8, Wild: 0,
-};
-const quickAmounts = ['10', '50', '100', '500', '1000'];
-
-function generatePlaceholderGrid(): string[][] {
-  return Array.from({ length: 3 }, () =>
-    Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)])
-  );
-}
-
-function checkWins(grid: string[][]): { positions: [number, number][]; multiplier: number }[] {
-  const wins: { positions: [number, number][]; multiplier: number }[] = [];
-  for (let r = 0; r < 3; r++) {
-    const row = grid[r].map((s) => (s === 'Wild' ? grid[r].find((x) => x !== 'Wild') || s : s));
-    if (row[0] === row[1] && row[1] === row[2]) {
-      wins.push({ positions: [[r, 0], [r, 1], [r, 2]], multiplier: PAYOUTS[row[0]] || 5 });
-    }
-  }
-  const tl = grid[0][0] === 'Wild' ? grid[1][1] : grid[0][0];
-  const mid = grid[1][1] === 'Wild' ? tl : grid[1][1];
-  const br = grid[2][2] === 'Wild' ? mid : grid[2][2];
-  if (tl === mid && mid === br && tl) {
-    wins.push({ positions: [[0, 0], [1, 1], [2, 2]], multiplier: PAYOUTS[tl] || 5 });
-  }
-  const tr = grid[0][2] === 'Wild' ? grid[1][1] : grid[0][2];
-  const mid2 = grid[1][1] === 'Wild' ? tr : grid[1][1];
-  const bl = grid[2][0] === 'Wild' ? mid2 : grid[2][0];
-  if (tr === mid2 && mid2 === bl && tr) {
-    wins.push({ positions: [[0, 2], [1, 1], [2, 0]], multiplier: PAYOUTS[tr] || 5 });
-  }
-  let diamonds = 0;
-  const dPos: [number, number][] = [];
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      if (grid[r][c] === 'Diamond') { diamonds++; dPos.push([r, c]); }
-    }
-  }
-  if (diamonds >= 3) {
-    wins.push({ positions: dPos.slice(0, 3), multiplier: 200 });
-  }
-  return wins;
-}
+import { Button } from '@/components/ui/button';
+import { SlotReel } from '@/components/games/slot-reel';
+import { SlotPaytable } from '@/components/games/slot-paytable';
+import { RotateCcw, Wifi, WifiOff } from 'lucide-react';
+import {
+  REELS, ROWS, BET_AMOUNTS, AUTO_OPTIONS,
+  generateGrid, checkPaylines, getWinTier,
+  type WinResult, type WinTier,
+} from '@/components/games/slot-logic';
 
 export default function SlotsPage() {
   const { authenticated, login, user } = usePrivy();
   const walletAddress = user?.wallet?.address;
-  const [amount, setAmount] = useState('10');
-  const [grid, setGrid] = useState<string[][]>(generatePlaceholderGrid);
+
+  const [betAmount, setBetAmount] = useState(10);
+  const [grid, setGrid] = useState<string[][]>(() => generateGrid());
   const [spinning, setSpinning] = useState(false);
-  const [colDone, setColDone] = useState([true, true, true]);
-  const [wins, setWins] = useState<ReturnType<typeof checkWins>>([]);
+  const [wins, setWins] = useState<WinResult[]>([]);
   const [lastPayout, setLastPayout] = useState<number | null>(null);
-  const [history, setHistory] = useState<{ id: number; payout: number }[]>([]);
+  const [winTier, setWinTier] = useState<WinTier>('none');
+  const [history, setHistory] = useState<{ id: number; payout: number; mid: string[] }[]>([]);
   const [autoSpins, setAutoSpins] = useState(0);
   const autoRef = useRef(0);
   const [balance, setBalance] = useState(0);
-  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [apiConnected, setApiConnected] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const winningRowsPerReel = useMemo(() => {
+    const result: Set<number>[] = Array.from({ length: REELS }, () => new Set<number>());
+    wins.forEach((w) => w.positions.forEach(([r, c]) => result[c].add(r)));
+    return result;
+  }, [wins]);
+
+  const totalMultiplier = useMemo(() => wins.reduce((s, w) => s + w.multiplier, 0), [wins]);
 
   const refreshBalance = useCallback(async () => {
     if (!walletAddress) return;
-    try { setBalance(await getBalance(walletAddress)); } catch { /* ignore */ }
+    try { setBalance(await getBalance(walletAddress)); setApiConnected(true); }
+    catch { setApiConnected(false); }
   }, [walletAddress]);
 
   useEffect(() => { refreshBalance(); }, [refreshBalance]);
@@ -87,209 +54,314 @@ export default function SlotsPage() {
     return () => window.removeEventListener('balance-updated', handler);
   }, [refreshBalance]);
 
-  const betAmount = parseFloat(amount || '0');
-
   const spin = useCallback(async () => {
     if (!authenticated) { login(); return; }
-    if (spinning || !walletAddress) return;
-    if (betAmount <= 0 || betAmount > balance) return;
+    if (spinning || !walletAddress || betAmount <= 0 || betAmount > balance) return;
+
     setSpinning(true);
     setWins([]);
     setLastPayout(null);
-    setBalanceDelta(null);
-    setColDone([false, false, false]);
+    setWinTier('none');
     setError(null);
+
+    let resultGrid: string[][];
+    let payoutVal = 0;
+    let newBal = balance;
 
     try {
       const response = await startGame(walletAddress, 'slots', { betAmount });
-      const resultGrid = (response.result as { grid: string[][] })?.grid || generatePlaceholderGrid();
-      const payoutVal = response.payout || 0;
-      const newBal = response.newBalance ?? balance;
-
-      // Stagger columns
-      [0, 1, 2].forEach((col) => {
-        setTimeout(() => {
-          setGrid((prev) => {
-            const g = prev.map((r) => [...r]);
-            for (let r = 0; r < 3; r++) g[r][col] = resultGrid[r][col];
-            return g;
-          });
-          setColDone((prev) => { const n = [...prev]; n[col] = true; return n; });
-        }, 600 + col * 400);
-      });
-
-      setTimeout(() => {
-        const w = checkWins(resultGrid);
-        setWins(w);
-        const net = payoutVal > 0 ? payoutVal - betAmount : -betAmount;
-        setLastPayout(payoutVal > 0 ? payoutVal : -betAmount);
-        setBalanceDelta(net);
-        setBalance(newBal);
-        window.dispatchEvent(new Event('balance-updated'));
-        setHistory((prev) => [{ id: Date.now(), payout: payoutVal > 0 ? payoutVal : -betAmount }, ...prev.slice(0, 19)]);
-        setSpinning(false);
-      }, 1800);
-    } catch (err) {
-      setSpinning(false);
-      setColDone([true, true, true]);
-      setError(err instanceof Error ? err.message : 'Erro de conexao');
-      await refreshBalance();
+      const apiGrid = (response.result as { grid?: string[][] })?.grid;
+      resultGrid = (apiGrid?.length === ROWS && apiGrid[0]?.length === REELS) ? apiGrid : generateGrid();
+      payoutVal = response.payout || 0;
+      newBal = response.newBalance ?? balance;
+      setApiConnected(true);
+    } catch {
+      resultGrid = generateGrid();
+      setApiConnected(false);
+      const localWins = checkPaylines(resultGrid);
+      const localMult = localWins.reduce((s, w) => s + w.multiplier, 0);
+      payoutVal = localMult * betAmount;
+      newBal = balance - betAmount + payoutVal;
     }
-  }, [authenticated, login, spinning, amount, betAmount, walletAddress, balance, refreshBalance]);
+
+    setGrid(resultGrid);
+    const totalTime = 800 + REELS * 400 + 600;
+
+    setTimeout(() => {
+      const w = checkPaylines(resultGrid);
+      setWins(w);
+      const mult = w.reduce((s, win) => s + win.multiplier, 0);
+      setWinTier(getWinTier(mult));
+      setLastPayout(payoutVal > 0 ? payoutVal : -betAmount);
+      setBalance(newBal);
+      window.dispatchEvent(new Event('balance-updated'));
+      setHistory((prev) => [
+        { id: Date.now(), payout: payoutVal > 0 ? payoutVal : -betAmount, mid: resultGrid[1] },
+        ...prev.slice(0, 19),
+      ]);
+      setSpinning(false);
+    }, totalTime);
+  }, [authenticated, login, spinning, betAmount, walletAddress, balance]);
 
   useEffect(() => { autoRef.current = autoSpins; }, [autoSpins]);
   useEffect(() => {
     if (!spinning && autoRef.current > 0) {
-      const t = setTimeout(() => { setAutoSpins((p) => p - 1); spin(); }, 1000);
+      const t = setTimeout(() => { setAutoSpins((p) => p - 1); spin(); }, 1200);
       return () => clearTimeout(t);
     }
   }, [spinning, spin]);
 
-  const isWinPos = (r: number, c: number) =>
-    wins.some((w) => w.positions.some(([wr, wc]) => wr === r && wc === c));
-
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 rounded-full bg-betcoin-primary/30 blur-lg" />
-            <Sparkles className="relative h-8 w-8 text-betcoin-primary" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-5xl mx-auto px-2 sm:px-4">
+      <div className={cn(winTier === 'mega' && !spinning && 'slot-screen-shake')}>
+
+        {/* Title */}
+        <div className="text-center mb-6">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+            <span className="slot-title-glow">FORTUNE GOLD</span>
+            <span className="ml-2 text-2xl">⭐</span>
+          </h1>
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <span className={cn('inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full',
+              apiConnected
+                ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+            )}>
+              {apiConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {apiConnected ? 'Online' : 'Offline'}
+            </span>
           </div>
-          <span className="gradient-text">Fortune Crypto</span>
-        </h1>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">Saldo</p>
-          <p className="text-lg font-bold font-mono text-white">{formatUSDT(balance)}</p>
-          <AnimatePresence>
-            {balanceDelta !== null && !spinning && (
-              <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                {balanceDelta >= 0 ? `+${formatUSDT(balanceDelta)}` : formatUSDT(balanceDelta)}
-              </motion.p>
-            )}
-          </AnimatePresence>
         </div>
-        <p className="text-gray-400 mt-2">Slot machine cripto com paylines e multiplicadores. RTP: 96%</p>
-      </motion.div>
 
-      {error && (
-        <div className="mb-4 p-3 rounded-xl bg-betcoin-red/10 border border-betcoin-red/20 text-betcoin-red-light text-sm">{error}</div>
-      )}
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+            {error}
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {grid.map((row, r) =>
-                row.map((sym, c) => (
-                  <motion.div key={`${r}-${c}`}
-                    animate={{
-                      scale: !colDone[c] ? [1, 0.8, 1] : isWinPos(r, c) ? [1, 1.1, 1] : 1,
-                      rotateX: !colDone[c] ? [0, 360] : 0,
-                    }}
-                    transition={{ duration: !colDone[c] ? 0.4 : 0.6, repeat: !colDone[c] ? Infinity : 0 }}
-                    className={cn(
-                      'aspect-square rounded-xl flex items-center justify-center text-4xl border-2 transition-all',
-                      isWinPos(r, c) ? 'border-betcoin-primary bg-betcoin-primary/20 shadow-[0_0_20px_rgba(247,147,26,0.4)]' : 'border-white/10 bg-white/5'
-                    )}>
-                    {SYMBOL_DISPLAY[sym]}
-                  </motion.div>
-                ))
-              )}
+        {/* Slot Machine Frame */}
+        <div className="slot-frame relative rounded-2xl p-1 mb-6">
+          <div className="bg-[#0d0b1a] rounded-xl p-3 sm:p-5">
+            {/* Reels */}
+            <div className="grid grid-cols-5 gap-1 sm:gap-2 mb-4">
+              {Array.from({ length: REELS }, (_, col) => (
+                <SlotReel
+                  key={col}
+                  reelIndex={col}
+                  results={[grid[0][col], grid[1][col], grid[2][col]]}
+                  spinning={spinning}
+                  delay={800 + col * 400}
+                  winningRows={winningRowsPerReel[col]}
+                  megaWin={winTier === 'mega' || winTier === 'big'}
+                />
+              ))}
             </div>
 
+            {/* Center payline indicator */}
+            <div className="absolute left-0 right-0 pointer-events-none z-20" style={{ top: 'calc(50% - 10px)' }}>
+              <div className="flex items-center">
+                <div className="w-2 h-4 bg-amber-500 rounded-r" />
+                <div className="flex-1 border-t border-amber-500/30 border-dashed" />
+                <div className="w-2 h-4 bg-amber-500 rounded-l" />
+              </div>
+            </div>
+
+            {/* Win Display */}
             <AnimatePresence>
               {lastPayout !== null && !spinning && (
-                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                  className={cn('text-center py-3 rounded-xl mb-4 border',
-                    lastPayout > 0 ? 'bg-betcoin-accent/10 border-betcoin-accent/20' : 'bg-betcoin-red/10 border-betcoin-red/20')}>
-                  <p className={cn('text-2xl font-bold font-mono', lastPayout > 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                    {lastPayout > 0 ? `+${formatUSDT(lastPayout)}` : formatUSDT(lastPayout)}
-                  </p>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                  className="mt-3"
+                >
+                  {lastPayout > 0 ? (
+                    <div className={cn(
+                      'text-center py-3 rounded-xl border',
+                      winTier === 'mega' && 'bg-amber-500/20 border-amber-400/40 slot-win-glow',
+                      winTier === 'big' && 'bg-amber-500/15 border-amber-400/30 slot-win-glow',
+                      winTier === 'medium' && 'bg-amber-500/10 border-amber-400/20',
+                      winTier === 'small' && 'bg-green-500/10 border-green-500/20',
+                    )}>
+                      {(winTier === 'mega' || winTier === 'big') && (
+                        <motion.p
+                          initial={{ scale: 0 }}
+                          animate={{ scale: [0, 1.3, 1] }}
+                          className={cn(
+                            'text-sm font-black uppercase tracking-widest mb-1',
+                            winTier === 'mega' ? 'text-amber-300 slot-mega-text' : 'text-amber-400'
+                          )}
+                        >
+                          {winTier === 'mega' ? '🎰 MEGA WIN! 🎰' : '🎉 BIG WIN!'}
+                        </motion.p>
+                      )}
+                      <p className={cn(
+                        'font-black font-mono',
+                        winTier === 'mega' ? 'text-3xl sm:text-4xl text-amber-300' :
+                          winTier === 'big' ? 'text-2xl sm:text-3xl text-amber-400' :
+                            'text-xl sm:text-2xl text-green-400'
+                      )}>
+                        +{formatUSDT(lastPayout)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {totalMultiplier.toFixed(1)}x multiplicador
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center py-2">
+                      <p className="text-lg font-mono text-gray-500">{formatUSDT(lastPayout)}</p>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="space-y-3 mb-4">
-              <label className="text-sm text-gray-400 font-medium">Valor da Aposta</label>
-              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min="1" disabled={spinning} className="font-mono" />
-              <div className="flex gap-2 flex-wrap">
-                {quickAmounts.map((val) => (
-                  <Button key={val} variant="outline" size="sm" onClick={() => setAmount(val)} disabled={spinning}
-                    className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>{val}</Button>
+            {/* Particles for big/mega wins */}
+            {(winTier === 'mega' || winTier === 'big') && !spinning && (
+              <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
+                {Array.from({ length: winTier === 'mega' ? 20 : 10 }, (_, i) => (
+                  <div
+                    key={i}
+                    className="slot-particle"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      animationDelay: `${Math.random() * 2}s`,
+                      animationDuration: `${1.5 + Math.random() * 2}s`,
+                    }}
+                  />
                 ))}
               </div>
-            </div>
-
-            <div className="flex gap-3">
-              {betAmount > balance && balance > 0 && (
-                <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
-              )}
-              <Button onClick={spin} disabled={spinning || !amount || betAmount <= 0 || betAmount > balance} loading={spinning} size="xl" className="flex-1 text-lg font-bold">
-                {spinning ? 'Girando...' : authenticated ? 'Girar' : 'Conectar para Jogar'}
-              </Button>
-            </div>
-
-            <div className="flex gap-2 mt-3">
-              <span className="text-xs text-gray-500 self-center">Auto:</span>
-              {[5, 10, 25].map((n) => (
-                <Button key={n} variant="ghost" size="sm" onClick={() => { setAutoSpins(n); spin(); }} disabled={spinning || autoSpins > 0} className="text-xs">
-                  <RotateCcw className="h-3 w-3 mr-1" />{n}
-                </Button>
-              ))}
-              {autoSpins > 0 && (
-                <Button variant="destructive" size="sm" onClick={() => setAutoSpins(0)} className="text-xs ml-auto">Parar ({autoSpins})</Button>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Zap className="h-4 w-4 text-betcoin-primary" /> Tabela de Pagamentos
-            </h3>
-            <div className="grid grid-cols-3 gap-2">
-              {SYMBOLS.filter((s) => s !== 'Wild').map((sym) => (
-                <div key={sym} className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
-                  <span className="text-xl">{SYMBOL_DISPLAY[sym]}</span>
-                  <div>
-                    <p className="text-xs text-gray-400">{sym}</p>
-                    <p className="text-sm font-mono text-betcoin-primary">{PAYOUTS[sym]}x</p>
-                  </div>
-                </div>
-              ))}
-              <div className="flex items-center gap-2 bg-betcoin-primary/10 border border-betcoin-primary/20 rounded-lg px-3 py-2">
-                <span className="text-xl">{SYMBOL_DISPLAY['Wild']}</span>
-                <div>
-                  <p className="text-xs text-betcoin-primary">Wild</p>
-                  <p className="text-xs text-gray-400">Substitui</p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Historico</h3>
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {history.map((entry) => (
-              <motion.div key={entry.id} initial={{ scale: 0 }} animate={{ scale: 1 }}
-                className={cn('h-3 w-3 rounded-full', entry.payout > 0 ? 'bg-betcoin-accent shadow-glow-green' : 'bg-betcoin-red shadow-glow-red')} />
+        {/* Controls */}
+        <div className="space-y-4 mb-6">
+          {/* Balance bar */}
+          <div className="flex items-center justify-between glass-card px-4 py-3">
+            <div>
+              <p className="text-xs text-gray-500">Saldo</p>
+              <p className="text-lg font-bold font-mono text-white">{formatUSDT(balance)}</p>
+            </div>
+            <AnimatePresence>
+              {lastPayout !== null && !spinning && (
+                <motion.p
+                  initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+                  className={cn('text-sm font-mono font-bold',
+                    lastPayout > 0 ? 'text-green-400' : 'text-red-400'
+                  )}
+                >
+                  {lastPayout > 0 ? `+${formatUSDT(lastPayout)}` : formatUSDT(lastPayout)}
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Bet chips */}
+          <div>
+            <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Aposta</p>
+            <div className="flex gap-1.5 sm:gap-2 flex-wrap">
+              {BET_AMOUNTS.map((val) => (
+                <Button
+                  key={val}
+                  variant={betAmount === val ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setBetAmount(val)}
+                  disabled={spinning}
+                  className={cn('text-xs font-mono min-w-[3rem]',
+                    betAmount === val && 'shadow-[0_0_12px_rgba(247,147,26,0.3)]'
+                  )}
+                >
+                  {val}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Spin */}
+          <Button
+            onClick={spin}
+            disabled={spinning || betAmount <= 0 || betAmount > balance}
+            loading={spinning}
+            size="xl"
+            className={cn('w-full text-lg font-black uppercase tracking-wider', !spinning && 'slot-spin-btn')}
+          >
+            {spinning ? 'Girando...' : authenticated ? 'GIRAR' : 'Conectar para Jogar'}
+          </Button>
+
+          {betAmount > balance && balance > 0 && (
+            <p className="text-xs text-red-400 text-center">Saldo insuficiente</p>
+          )}
+
+          {/* Auto-spin */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500 uppercase tracking-wider">Auto:</span>
+            {AUTO_OPTIONS.map((n) => (
+              <Button key={n} variant="ghost" size="sm"
+                onClick={() => { setAutoSpins(n); spin(); }}
+                disabled={spinning || autoSpins > 0} className="text-xs"
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />{n}
+              </Button>
+            ))}
+            {autoSpins > 0 && (
+              <Button variant="destructive" size="sm" onClick={() => setAutoSpins(0)} className="text-xs ml-auto">
+                Parar ({autoSpins})
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Paytable */}
+        <div className="mb-6"><SlotPaytable /></div>
+
+        {/* History */}
+        <div className="glass-card p-4 mb-6">
+          <button onClick={() => setShowHistory(!showHistory)} className="w-full flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+              Historico ({history.length})
+            </h3>
+            <span className="text-xs text-gray-500">{showHistory ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
+
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {history.map((e) => (
+              <motion.div key={e.id} initial={{ scale: 0 }} animate={{ scale: 1 }}
+                className={cn('h-2.5 w-2.5 rounded-full',
+                  e.payout > 0 ? 'bg-green-400 shadow-[0_0_6px_rgba(0,255,136,0.4)]' : 'bg-red-500/60'
+                )}
+              />
             ))}
             {history.length === 0 && <p className="text-xs text-gray-600">Nenhuma jogada ainda</p>}
           </div>
-          <div className="space-y-2">
-            {history.map((entry) => (
-              <motion.div key={entry.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                className="bg-white/5 border border-white/5 rounded-xl px-3 py-2.5 flex items-center justify-between">
-                <span className="text-xs text-gray-400">Slot</span>
-                <span className={cn('text-xs font-mono font-semibold', entry.payout > 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                  {entry.payout > 0 ? `+${formatUSDT(entry.payout)}` : formatUSDT(entry.payout)}
-                </span>
+
+          <AnimatePresence>
+            {showHistory && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }} className="space-y-1.5 overflow-hidden"
+              >
+                {history.map((e) => (
+                  <motion.div key={e.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+                    className="bg-white/5 border border-white/5 rounded-lg px-3 py-2 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">Slot</span>
+                      <span className="text-sm">{e.mid.join(' ')}</span>
+                    </div>
+                    <span className={cn('text-xs font-mono font-semibold',
+                      e.payout > 0 ? 'text-green-400' : 'text-red-400'
+                    )}>
+                      {e.payout > 0 ? `+${formatUSDT(e.payout)}` : formatUSDT(e.payout)}
+                    </span>
+                  </motion.div>
+                ))}
               </motion.div>
-            ))}
-          </div>
+            )}
+          </AnimatePresence>
         </div>
+
       </div>
     </motion.div>
   );

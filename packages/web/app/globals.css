@@ -220,3 +220,163 @@ input[type='range'].dice-range::-moz-range-thumb {
   cursor: pointer;
   box-shadow: 0 0 15px rgba(247, 147, 26, 0.5);
 }
+
+/* ═══ Fortune Gold Slot Machine ═══ */
+
+/* Golden ornate frame */
+.slot-frame {
+  background: linear-gradient(135deg, #b8860b, #ffd700, #daa520, #ffd700, #b8860b);
+  box-shadow:
+    0 0 30px rgba(255, 215, 0, 0.15),
+    inset 0 0 30px rgba(255, 215, 0, 0.05);
+}
+
+/* Title glow */
+.slot-title-glow {
+  background: linear-gradient(135deg, #ffd700, #ffb347, #ffd700);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.3));
+}
+
+/* Reel spinning - continuous fast scroll */
+@keyframes slotReelSpin {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+.slot-reel-spinning {
+  animation: slotReelSpin 0.15s linear infinite;
+}
+
+/* Reel stopping - decelerate with bounce */
+@keyframes slotReelStop {
+  0% { transform: translateY(-30%); }
+  60% { transform: translateY(var(--stop-pos, -2100px)); }
+  75% { transform: translateY(calc(var(--stop-pos, -2100px) + 20px)); }
+  88% { transform: translateY(calc(var(--stop-pos, -2100px) - 8px)); }
+  100% { transform: translateY(var(--stop-pos, -2100px)); }
+}
+
+.slot-reel-stopping {
+  animation: slotReelStop 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+/* Winning symbol pulse */
+@keyframes slotSymbolWin {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.15);
+    filter: brightness(1.4);
+  }
+}
+
+.slot-symbol-win {
+  animation: slotSymbolWin 0.8s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, transparent 70%);
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+.slot-symbol-mega {
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.2);
+}
+
+/* Win glow on frame */
+@keyframes slotWinGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.5), 0 0 80px rgba(255, 215, 0, 0.2);
+  }
+}
+
+.slot-win-glow {
+  animation: slotWinGlow 1s ease-in-out infinite;
+}
+
+/* Mega win text shimmer */
+@keyframes slotMegaText {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.slot-mega-text {
+  background: linear-gradient(90deg, #ffd700, #fff, #ffd700, #fff, #ffd700);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: slotMegaText 2s linear infinite;
+}
+
+/* Screen shake */
+@keyframes slotScreenShake {
+  0%, 100% { transform: translate(0); }
+  10% { transform: translate(-3px, 2px); }
+  20% { transform: translate(3px, -2px); }
+  30% { transform: translate(-2px, 3px); }
+  40% { transform: translate(2px, -1px); }
+  50% { transform: translate(-1px, 2px); }
+  60% { transform: translate(2px, 1px); }
+  70% { transform: translate(-2px, -1px); }
+  80% { transform: translate(1px, 2px); }
+  90% { transform: translate(-1px, -2px); }
+}
+
+.slot-screen-shake {
+  animation: slotScreenShake 0.5s ease-in-out;
+}
+
+/* Sparkle particles */
+@keyframes slotParticle {
+  0% {
+    transform: translateY(100%) scale(0);
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-400px) scale(1);
+    opacity: 0;
+  }
+}
+
+.slot-particle {
+  position: absolute;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffd700;
+  box-shadow: 0 0 6px #ffd700, 0 0 12px rgba(255, 215, 0, 0.5);
+  animation: slotParticle 2s ease-out infinite;
+}
+
+.slot-particle:nth-child(odd) {
+  background: #fff;
+  box-shadow: 0 0 6px #fff, 0 0 12px rgba(255, 255, 255, 0.5);
+  width: 3px;
+  height: 3px;
+}
+
+/* Spin button pulsing glow */
+@keyframes slotSpinBtnGlow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(247, 147, 26, 0.4), 0 0 50px rgba(247, 147, 26, 0.15);
+  }
+}
+
+.slot-spin-btn {
+  animation: slotSpinBtnGlow 2s ease-in-out infinite;
+}
