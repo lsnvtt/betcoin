@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
 import { polygon, polygonAmoy } from 'viem/chains';
 import { useState, type ReactNode } from 'react';
+import { I18nProvider } from '@/lib/i18n';
 
 const isTestnet = process.env.NODE_ENV !== 'production';
 const activeChain = isTestnet ? polygonAmoy : polygon;
@@ -41,7 +42,7 @@ export function Providers({ children }: { children: ReactNode }) {
     >
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={wagmiConfig}>
-          {children}
+          <I18nProvider>{children}</I18nProvider>
         </WagmiProvider>
       </QueryClientProvider>
     </PrivyProvider>

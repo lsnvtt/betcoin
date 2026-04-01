@@ -11,6 +11,7 @@ import TokenomicsChart from '@/components/landing/tokenomics-chart';
 import RevenueCalculator from '@/components/landing/revenue-calculator';
 import CountdownTimer from '@/components/landing/countdown-timer';
 import LiveWinners, { WinnerToast } from '@/components/landing/live-winners';
+import { useTranslation } from '@/lib/i18n';
 
 /* ─── Reusable scroll-animated section wrapper ─── */
 function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
@@ -77,32 +78,34 @@ function FloatingElements() {
 /* ═══════════════════════════════════════════════ */
 
 export default function Home() {
+  const { t } = useTranslation();
+
   const steps = [
-    { icon: Coins, title: 'Compre BETPASS', desc: 'Adquira tokens BETPASS no lançamento por $1 cada' },
-    { icon: Lock, title: 'Faça Stake', desc: 'Trave seus tokens no pool de staking e comece a ganhar' },
-    { icon: TrendingUp, title: 'Receba Receita', desc: '25% de todas as taxas da plataforma são distribuídas para stakers' },
+    { icon: Coins, title: t.landing.step1_title, desc: t.landing.step1_desc },
+    { icon: Lock, title: t.landing.step2_title, desc: t.landing.step2_desc },
+    { icon: TrendingUp, title: t.landing.step3_title, desc: t.landing.step3_desc },
   ];
 
   const games = [
-    { icon: CircleDot, name: 'CoinFlip', desc: 'Cara ou Coroa', detail: 'Payout 1.96x', available: true },
-    { icon: Dices, name: 'Dice', desc: 'Dados 1-100', detail: 'Odds dinâmicas até 98x', available: true },
-    { icon: ChartLine, name: 'Crash', desc: 'Crash Game', detail: 'Cash out antes do crash', available: true },
-    { icon: Trophy, name: 'Esportivas', desc: 'Apostas Esportivas', detail: 'Futebol, NBA, UFC', available: false },
-    { icon: Sparkles, name: 'Predictions', desc: 'Mercados Preditivos', detail: 'Previsões descentralizadas', available: false },
+    { icon: CircleDot, name: 'CoinFlip', desc: t.landing.game_coinflip, detail: t.landing.game_coinflip_detail, available: true },
+    { icon: Dices, name: 'Dice', desc: t.landing.game_dice, detail: t.landing.game_dice_detail, available: true },
+    { icon: ChartLine, name: 'Crash', desc: t.landing.game_crash, detail: t.landing.game_crash_detail, available: true },
+    { icon: Trophy, name: 'Esportivas', desc: t.landing.game_sports, detail: t.landing.game_sports_detail, available: false },
+    { icon: Sparkles, name: 'Predictions', desc: t.landing.game_predictions, detail: t.landing.game_predictions_detail, available: false },
   ];
 
   const security = [
-    { icon: Shield, title: 'Sem Login, Sem Cadastro', desc: 'Conecte apenas sua carteira. Sem email, sem senha, sem KYC. Privacidade total.' },
-    { icon: Code2, title: 'Código Open Source', desc: 'Contratos auditados e verificados na blockchain. Código aberto no GitHub.' },
-    { icon: Link2, title: 'Chainlink VRF', desc: 'Resultados gerados por oráculo descentralizado. Impossível manipular.' },
-    { icon: Zap, title: 'Polygon Blockchain', desc: 'Transações em segundos, taxas de centavos. Sem intermediários.' },
+    { icon: Shield, title: t.landing.no_login, desc: t.landing.no_login_desc },
+    { icon: Code2, title: t.landing.open_source, desc: t.landing.open_source_desc },
+    { icon: Link2, title: 'Chainlink VRF', desc: t.landing.chainlink_desc },
+    { icon: Zap, title: 'Polygon Blockchain', desc: t.landing.polygon_desc },
   ];
 
   const roadmap = [
     { quarter: 'Q1 2026', title: 'Token Launch + CoinFlip + Dice', status: 'done' as const },
-    { quarter: 'Q2 2026', title: 'Crash Game + Apostas Esportivas', status: 'progress' as const },
+    { quarter: 'Q2 2026', title: 'Crash Game + Sports Betting', status: 'progress' as const },
     { quarter: 'Q3 2026', title: 'PIX Onramp + Prediction Markets', status: 'upcoming' as const },
-    { quarter: 'Q4 2026', title: 'Mainnet Launch + Auditoria', status: 'upcoming' as const },
+    { quarter: 'Q4 2026', title: 'Mainnet Launch + Audit', status: 'upcoming' as const },
   ];
 
   return (
@@ -128,13 +131,13 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="inline-block mb-6 px-4 py-1.5 rounded-full glass-card text-sm text-gray-300"
           >
-            Sem Login &bull; Apenas Wallet &bull; 100% Anonimo &bull; Revenue Share
+            {t.landing.hero_badge}
           </motion.div>
 
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold leading-tight mb-6">
-            <span className="gradient-text">A Plataforma de Apostas</span>
+            <span className="gradient-text">{t.landing.hero_title_1}</span>
             <br />
-            <span className="text-white">do Futuro</span>
+            <span className="text-white">{t.landing.hero_title_2}</span>
           </h1>
 
           <motion.p
@@ -143,7 +146,7 @@ export default function Home() {
             transition={{ delay: 0.3, duration: 0.8 }}
             className="text-lg md:text-xl text-gray-400 mb-4 max-w-2xl mx-auto"
           >
-            Invista em BETPASS e receba 25% de todas as taxas da plataforma
+            {t.landing.hero_subtitle}
           </motion.p>
 
           {/* Urgency trigger */}
@@ -158,7 +161,7 @@ export default function Home() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
             </span>
             <span className="text-sm text-red-400 font-medium">
-              Apenas <span className="font-bold font-mono">2.847.500</span> tokens restantes de 3.000.000
+              <span className="font-bold font-mono">2.847.500</span> {t.landing.tokens_remaining}
             </span>
           </motion.div>
 
@@ -172,13 +175,13 @@ export default function Home() {
               href="#token-sale"
               className="px-8 py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r from-betcoin-primary to-betcoin-primary-light shadow-glow-orange hover:shadow-[0_0_40px_rgba(247,147,26,0.5)] transition-all duration-300 hover:scale-105"
             >
-              Comprar BETPASS
+              {t.landing.buy_betpass}
             </a>
             <a
               href="/coinflip"
               className="px-8 py-4 rounded-xl font-bold text-lg text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-300"
             >
-              Acessar Plataforma
+              {t.landing.access_platform}
             </a>
           </motion.div>
         </motion.div>
@@ -191,10 +194,10 @@ export default function Home() {
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { emoji: '🔒', title: 'Sem Login', desc: 'Conecte sua carteira e jogue. Sem email, sem senha, sem KYC.' },
-              { emoji: '👤', title: '100% Anônimo', desc: 'Nenhuma identificação pessoal. Apenas sua wallet.' },
-              { emoji: '⏰', title: 'Investimento Limitado', desc: 'Pré-venda por tempo limitado. Quando acabar, acabou.' },
-              { emoji: '📊', title: 'Auditoria Independente', desc: 'Contratos auditados por empresa terceira antes do lançamento.' },
+              { emoji: '🔒', title: t.landing.no_login_short, desc: t.landing.no_login_short_desc },
+              { emoji: '👤', title: t.landing.diff_anonymous, desc: t.landing.diff_anonymous_desc },
+              { emoji: '⏰', title: t.landing.diff_limited, desc: t.landing.diff_limited_desc },
+              { emoji: '📊', title: t.landing.diff_audit, desc: t.landing.diff_audit_desc },
             ].map((item, i) => (
               <motion.div
                 key={item.title}
@@ -216,7 +219,7 @@ export default function Home() {
       {/* ───── COMO FUNCIONA ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
-          <SectionTitle>Como Funciona</SectionTitle>
+          <SectionTitle>{t.landing.how_it_works}</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {steps.map((step, i) => (
               <motion.div
@@ -241,7 +244,7 @@ export default function Home() {
       {/* ───── TOKENOMICS ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
-          <SectionTitle>Tokenomics</SectionTitle>
+          <SectionTitle>{t.landing.tokenomics}</SectionTitle>
           <TokenomicsChart />
         </div>
       </Section>
@@ -249,7 +252,7 @@ export default function Home() {
       {/* ───── REVENUE CALCULATOR ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
-          <SectionTitle>Calcule Seu Retorno</SectionTitle>
+          <SectionTitle>{t.landing.calculate_return}</SectionTitle>
           <RevenueCalculator />
         </div>
       </Section>
@@ -257,7 +260,7 @@ export default function Home() {
       {/* ───── JOGOS ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
-          <SectionTitle>Jogos da Plataforma</SectionTitle>
+          <SectionTitle>{t.landing.games_title}</SectionTitle>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {games.map((game, i) => (
               <motion.div
@@ -273,9 +276,9 @@ export default function Home() {
                     <game.icon className="w-6 h-6 text-betcoin-primary" />
                   </div>
                   {game.available ? (
-                    <Badge text="Disponível" variant="green" />
+                    <Badge text={t.landing.available} variant="green" />
                   ) : (
-                    <Badge text="Em Breve" variant="orange" />
+                    <Badge text={t.landing.coming_soon} variant="orange" />
                   )}
                 </div>
                 <h3 className="text-lg font-bold text-white mb-1">{game.desc}</h3>
@@ -289,7 +292,7 @@ export default function Home() {
       {/* ───── SECURITY ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
-          <SectionTitle>Segurança e Transparência</SectionTitle>
+          <SectionTitle>{t.landing.security_title}</SectionTitle>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {security.map((item, i) => (
               <motion.div
@@ -314,7 +317,7 @@ export default function Home() {
       {/* ───── ROADMAP ───── */}
       <Section>
         <div className="max-w-3xl mx-auto">
-          <SectionTitle>Roadmap</SectionTitle>
+          <SectionTitle>{t.landing.roadmap}</SectionTitle>
           <div className="relative">
             {/* Timeline line */}
             <div className="absolute left-4 md:left-8 top-0 bottom-0 w-px bg-white/10" />
@@ -337,8 +340,8 @@ export default function Home() {
                   <div className="glass-card p-6">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="font-mono text-betcoin-primary font-bold text-sm">{item.quarter}</span>
-                      {item.status === 'done' && <Badge text="Concluído" variant="green" />}
-                      {item.status === 'progress' && <Badge text="Em Progresso" variant="orange" />}
+                      {item.status === 'done' && <Badge text={t.landing.completed} variant="green" />}
+                      {item.status === 'progress' && <Badge text={t.landing.in_progress} variant="orange" />}
                     </div>
                     <p className="text-white font-medium">{item.title}</p>
                   </div>
@@ -360,21 +363,21 @@ export default function Home() {
           className="relative z-10 text-center max-w-3xl"
         >
           <h2 className="text-3xl md:text-5xl font-bold mb-4">
-            <span className="gradient-text">Investimento por Tempo Limitado</span>
+            <span className="gradient-text">{t.landing.limited_investment}</span>
           </h2>
           <p className="text-gray-400 text-lg mb-4">
-            Conecte sua wallet e garanta seus BETPASS. Sem login, sem cadastro, sem KYC.
+            {t.landing.limited_desc}
           </p>
 
           {/* Scarcity + Social proof triggers */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10 text-sm">
             <div className="glass-card px-4 py-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-gray-300"><span className="text-white font-bold font-mono">1.247</span> investidores ja compraram</span>
+              <span className="text-gray-300"><span className="text-white font-bold font-mono">1.247</span> {t.landing.investors_bought}</span>
             </div>
             <div className="glass-card px-4 py-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-gray-300">Pre-sale encerra em breve</span>
+              <span className="text-gray-300">{t.landing.presale_ending}</span>
             </div>
           </div>
 
@@ -388,13 +391,13 @@ export default function Home() {
             whileTap={{ scale: 0.97 }}
             className="inline-block px-10 py-5 rounded-xl font-bold text-xl text-white bg-gradient-to-r from-betcoin-primary to-betcoin-primary-light shadow-glow-orange animate-glow-pulse hover:shadow-[0_0_50px_rgba(247,147,26,0.6)] transition-all duration-300"
           >
-            Comprar BETPASS Agora
+            {t.landing.buy_now}
           </motion.a>
 
           <p className="mt-8 text-gray-500 text-sm">
-            Já tem conta?{' '}
+            {t.landing.have_account}{' '}
             <a href="/coinflip" className="text-betcoin-primary hover:underline">
-              Acessar plataforma &rarr;
+              {t.landing.access} &rarr;
             </a>
           </p>
         </motion.div>
@@ -405,23 +408,17 @@ export default function Home() {
         <div className="max-w-3xl mx-auto">
           <div className="glass-card p-8 border-yellow-500/20">
             <h3 className="text-yellow-400 font-bold text-lg mb-4 flex items-center gap-2">
-              <span className="text-2xl">⚠️</span> Aviso Legal — Leia Antes de Investir
+              <span className="text-2xl">&#9888;&#65039;</span> {t.landing.disclaimer_title}
             </h3>
             <div className="space-y-3 text-gray-400 text-sm leading-relaxed">
               <p>
-                <strong className="text-white">Investimento em criptoativos nao e garantia de retorno futuro.</strong> O valor dos tokens BETPASS pode variar significativamente e voce pode perder parte ou todo o capital investido. Apostas sao feitas em USDT.
+                <strong className="text-white">{t.landing.disclaimer_1}</strong>
               </p>
-              <p>
-                Rentabilidades passadas nao sao indicativas de resultados futuros. O revenue share depende do volume de apostas na plataforma, que pode variar.
-              </p>
-              <p>
-                Os valores, projecoes e estimativas apresentados neste site sao meramente ilustrativos e nao constituem promessa ou garantia de rendimento.
-              </p>
-              <p>
-                Antes de investir, avalie cuidadosamente sua situacao financeira e tolerancia a risco. Invista apenas o que voce pode se dar ao luxo de perder.
-              </p>
+              <p>{t.landing.disclaimer_2}</p>
+              <p>{t.landing.disclaimer_3}</p>
+              <p>{t.landing.disclaimer_4}</p>
               <p className="text-gray-500 text-xs pt-2 border-t border-white/5">
-                BETPASS e um utility token que da direito a participacao nas receitas da plataforma via staking. Nao constitui valor mobiliario, acao ou titulo de divida. A plataforma BetCoin opera na blockchain Polygon e esta sujeita aos riscos inerentes de contratos inteligentes e protocolos descentralizados.
+                {t.landing.disclaimer_legal}
               </p>
             </div>
           </div>
@@ -441,8 +438,8 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-8 text-center text-xs text-gray-600">
-            <p>&copy; 2026 BetCoin. Todos os direitos reservados.</p>
-            <p className="mt-2">Investimento em criptoativos envolve riscos significativos. Rentabilidade passada não é garantia de retorno futuro. Faça sua própria pesquisa (DYOR) antes de investir.</p>
+            <p>{t.landing.footer_rights}</p>
+            <p className="mt-2">{t.landing.footer_disclaimer}</p>
           </div>
         </div>
       </footer>

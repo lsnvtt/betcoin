@@ -25,6 +25,7 @@ import {
 import { cn, shortenAddress } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from '@/lib/i18n';
 
 interface NavItem {
   name: string;
@@ -38,35 +39,38 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const navigation: NavGroup[] = [
-  {
-    section: 'Jogos',
-    items: [
-      { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-      { name: 'CoinFlip', href: '/coinflip', icon: CircleDot },
-      { name: 'Dice', href: '/dice', icon: Dice5 },
-      { name: 'Slots', href: '/slots', icon: Sparkles, badge: 'Novo' },
-      { name: 'Crash', href: '/crash', icon: TrendingUp, badge: 'Novo' },
-      { name: 'Mines', href: '/mines', icon: Bomb, badge: 'Novo' },
-      { name: 'Roleta', href: '/roulette', icon: Circle, badge: 'Novo' },
-      { name: 'Plinko', href: '/plinko', icon: Triangle, badge: 'Novo' },
-    ],
-  },
-  {
-    section: 'Apostas',
-    items: [
-      { name: 'Esportivas', href: '/events', icon: Trophy },
-    ],
-  },
-  {
-    section: 'Gestao',
-    items: [
-      { name: 'Minha Banca', href: '/pools', icon: Landmark },
-      { name: 'Admin', href: '/admin', icon: ShieldCheck },
-      { name: 'BETPASS', href: '/betpass', icon: Ticket },
-    ],
-  },
-];
+function useNavigation(): NavGroup[] {
+  const { t } = useTranslation();
+  return [
+    {
+      section: t.sidebar.games,
+      items: [
+        { name: t.sidebar.dashboard, href: '/', icon: LayoutDashboard },
+        { name: 'CoinFlip', href: '/coinflip', icon: CircleDot },
+        { name: 'Dice', href: '/dice', icon: Dice5 },
+        { name: 'Slots', href: '/slots', icon: Sparkles, badge: t.common.new_badge },
+        { name: 'Crash', href: '/crash', icon: TrendingUp, badge: t.common.new_badge },
+        { name: 'Mines', href: '/mines', icon: Bomb, badge: t.common.new_badge },
+        { name: t.games.roulette, href: '/roulette', icon: Circle, badge: t.common.new_badge },
+        { name: 'Plinko', href: '/plinko', icon: Triangle, badge: t.common.new_badge },
+      ],
+    },
+    {
+      section: t.sidebar.bets,
+      items: [
+        { name: t.sidebar.sports, href: '/events', icon: Trophy },
+      ],
+    },
+    {
+      section: t.sidebar.management,
+      items: [
+        { name: t.sidebar.my_bank, href: '/pools', icon: Landmark },
+        { name: t.sidebar.admin, href: '/admin', icon: ShieldCheck },
+        { name: 'BETPASS', href: '/betpass', icon: Ticket },
+      ],
+    },
+  ];
+}
 
 interface SidebarProps {
   open: boolean;
@@ -76,6 +80,7 @@ interface SidebarProps {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, authenticated } = usePrivy();
+  const navigation = useNavigation();
   const walletAddress = user?.wallet?.address;
 
   const [nickname, setNickname] = useState('');

@@ -7,6 +7,8 @@ import { shortenAddress } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getBalance as fetchBalance, faucet as apiFaucet } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LanguageSelector } from '@/components/layout/language-selector';
+import { useTranslation } from '@/lib/i18n';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -37,6 +39,7 @@ function useNickname(walletAddress: string | undefined) {
 
 export function Header({ onToggleSidebar }: HeaderProps) {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const { t } = useTranslation();
   const [balance, setBalance] = useState<number>(0);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -116,6 +119,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </button>
 
       <div className="ml-auto flex items-center gap-3">
+        <LanguageSelector />
         {authenticated && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -147,14 +151,14 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             }`}
           >
             <Droplets className="h-3.5 w-3.5" />
-            {faucetUsed ? '+1.000 USDT!' : faucetLoading ? 'Carregando...' : 'Faucet 1000 USDT'}
+            {faucetUsed ? t.common.faucet_success : faucetLoading ? t.common.loading : t.common.faucet}
           </motion.button>
         )}
 
         {ready && !authenticated && (
           <Button onClick={login} size="md" variant="default">
             <Wallet className="h-4 w-4" />
-            Conectar Carteira
+            {t.common.connect_wallet}
           </Button>
         )}
 
