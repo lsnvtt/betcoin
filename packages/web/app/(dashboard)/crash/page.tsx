@@ -35,7 +35,7 @@ export default function CrashPage() {
   const { authenticated, login, user } = usePrivy();
   const walletAddress = user?.wallet?.address;
   const [amount, setAmount] = useState('50');
-  const [autoCashout, setAutoCashout] = useState('2.00');
+  const [autoCashout, setAutoCashout] = useState('');
   const [status, setStatus] = useState<GameStatus>('waiting');
   const [multiplier, setMultiplier] = useState(1.0);
   const [crashPoint, setCrashPoint] = useState(0);
@@ -122,7 +122,9 @@ export default function CrashPage() {
 
     try {
       const response = await startGame(walletAddress, 'crash', { betAmount });
-      const cp = (response.result as { crashPoint: number })?.crashPoint ?? 2.0;
+      // Get crash point from server; fallback generates random realistic value
+      const resultData = response.result as Record<string, unknown> | undefined;
+      const cp = (resultData?.crashPoint as number) ?? (resultData?.crash_point as number) ?? (1 + Math.random() * 15);
       crashRef.current = cp;
       setSessionId(response.sessionId);
       setBalance(response.newBalance ?? balance - betAmount);
