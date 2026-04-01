@@ -5,9 +5,11 @@ async function fetchApi<T>(
   options?: RequestInit & { walletAddress?: string }
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
+  // Only set Content-Type if we have a body
+  if (options?.body) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (options?.walletAddress) {
     headers['x-wallet-address'] = options.walletAddress;
   }
@@ -40,9 +42,10 @@ export async function getBalance(walletAddress: string): Promise<number> {
 }
 
 export async function faucet(walletAddress: string): Promise<number> {
-  const data = await fetchApi<{ balance: number }>('/api/faucet', {
+  const data = await fetchApi<{ balance: number }>('/api/balance/faucet', {
     method: 'POST',
     walletAddress,
+    body: JSON.stringify({}),
   });
   return data.balance;
 }
