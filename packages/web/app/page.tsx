@@ -12,6 +12,7 @@ import RevenueCalculator from '@/components/landing/revenue-calculator';
 import CountdownTimer from '@/components/landing/countdown-timer';
 import LiveWinners, { WinnerToast } from '@/components/landing/live-winners';
 import { useTranslation } from '@/lib/i18n';
+import { LanguageSelector } from '@/components/layout/language-selector';
 
 /* ─── Reusable scroll-animated section wrapper ─── */
 function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
@@ -111,6 +112,11 @@ export default function Home() {
   return (
     <main className="scroll-smooth overflow-x-hidden">
       <WinnerToast />
+
+      {/* ───── Language selector (fixed top-right) ───── */}
+      <div className="fixed top-4 right-4 z-50">
+        <LanguageSelector />
+      </div>
 
       {/* ───── HERO ───── */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-4 bg-grid">
