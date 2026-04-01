@@ -14,7 +14,9 @@ function AnimatedNumber({ value, prefix = '', suffix = '' }: { value: number; pr
 
   useEffect(() => {
     const unsubscribe = spring.on('change', (v) => {
-      if (v >= 1000000) {
+      if (v >= 1000000000) {
+        setDisplay((v / 1000000000).toFixed(2) + 'B');
+      } else if (v >= 1000000) {
         setDisplay((v / 1000000).toFixed(2) + 'M');
       } else if (v >= 1000) {
         setDisplay((v / 1000).toFixed(1) + 'K');
@@ -44,6 +46,7 @@ export default function RevenueCalculator() {
   const paybackMonths = monthlyRevenue > 0 ? investment / monthlyRevenue : Infinity;
 
   const formatSliderLabel = (val: number) => {
+    if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
     if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
     if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
     return val.toString();
@@ -95,18 +98,18 @@ export default function RevenueCalculator() {
           <input
             type="range"
             min={100000}
-            max={10000000}
-            step={100000}
+            max={1000000000}
+            step={1000000}
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
             className="w-full h-2 rounded-full appearance-none cursor-pointer dice-range"
             style={{
-              background: `linear-gradient(to right, #F7931A ${((volume - 100000) / (10000000 - 100000)) * 100}%, rgba(255,255,255,0.1) ${((volume - 100000) / (10000000 - 100000)) * 100}%)`,
+              background: `linear-gradient(to right, #F7931A ${((volume - 100000) / (1000000000 - 100000)) * 100}%, rgba(255,255,255,0.1) ${((volume - 100000) / (1000000000 - 100000)) * 100}%)`,
             }}
           />
           <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>$100K</span>
-            <span>$10M</span>
+            <span>$1B</span>
           </div>
         </div>
 
