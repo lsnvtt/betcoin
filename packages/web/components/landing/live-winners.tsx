@@ -32,8 +32,12 @@ function generateWinner(id: number): Winner {
   const name = NAMES[Math.floor(Math.random() * NAMES.length)];
   const game = GAMES[Math.floor(Math.random() * GAMES.length)];
   const multiplier = game.multipliers[Math.floor(Math.random() * game.multipliers.length)];
-  const betAmount = [50, 100, 200, 500, 1000, 2500, 5000][Math.floor(Math.random() * 7)];
-  const amount = betAmount * multiplier;
+  const betAmounts = [5, 10, 15, 25, 37, 50, 75, 100, 150, 250, 420, 500, 750, 1000, 1500, 2000];
+  const betAmount = betAmounts[Math.floor(Math.random() * betAmounts.length)];
+  let amount = betAmount * multiplier;
+  // Cap at 5000 and add random cents for natural look
+  amount = Math.min(amount, 4999);
+  amount = Math.floor(amount * 100 + Math.random() * 99) / 100;
   const minutes = Math.floor(Math.random() * 5) + 1;
 
   return {
@@ -108,7 +112,7 @@ export default function LiveWinners() {
                 <span className="text-xs text-gray-500">{winner.time}</span>
                 <div className="text-right">
                   <span className="text-green-400 font-bold font-mono">
-                    +{winner.amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} USDT
+                    +{winner.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
                   </span>
                   <span className="text-xs text-gray-500 ml-2">{winner.multiplier}x</span>
                 </div>
@@ -159,7 +163,7 @@ export function WinnerToast() {
                 {winner.name} <span className="text-gray-400">acabou de ganhar</span>
               </p>
               <p className="text-green-400 font-bold font-mono text-lg">
-                +{winner.amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} USDT
+                +{winner.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
               </p>
               <p className="text-gray-500 text-xs">{winner.game} &bull; {winner.multiplier}x</p>
             </div>
