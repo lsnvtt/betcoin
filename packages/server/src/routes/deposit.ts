@@ -37,7 +37,7 @@ export async function depositRoutes(app: FastifyInstance) {
 
     try {
       const result = await createDeposit({
-        userId: request.user!.id,
+        userId: request.walletAddress!,
         amountBRL: parsed.data.amountBRL,
         pixKey: parsed.data.pixKey,
       });
@@ -63,7 +63,7 @@ export async function depositRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await getDepositStatus(params.data.depositId, request.user!.id);
+      const result = await getDepositStatus(params.data.depositId, request.walletAddress!);
 
       if (!result) {
         return reply.status(404).send({ error: 'Deposit not found' });

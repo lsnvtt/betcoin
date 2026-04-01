@@ -1,9 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authMiddleware } from '../lib/auth.js';
-import { prisma } from '../lib/prisma.js';
-import { GameType as PrismaGameType } from '@prisma/client';
 import * as gameService from '../services/game.service.js';
+import * as balanceService from '../services/balance.service.js';
 
 // ─── Validation schemas ─────────────────────────────────────────────
 
@@ -18,7 +17,7 @@ const gameTypeParam = z.enum([
 ]);
 
 const startGameSchema = z.object({
-  betAmount: z.number().positive().max(1_000_000),
+  betAmount: z.number().positive().min(0.10).max(10_000),
   clientSeed: z.string().max(64).optional(),
 });
 
@@ -59,11 +58,6 @@ const cashoutSchema = z.object({
   sessionId: z.string().uuid(),
 });
 
-const historySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-});
-
 // ─── Helper ─────────────────────────────────────────────────────────
 
 function parseGameType(raw: string): z.infer<typeof gameTypeParam> | null {
@@ -98,6 +92,7 @@ export async function gamesRoutes(app: FastifyInstance) {
   /**
    * POST /api/games/:gameType/start
    * Creates a game session, deducts balance, returns serverSeedHash.
+   * All amounts in USDT.
    */
   app.post(
     '/api/games/:gameType/start',
@@ -125,8 +120,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       try {
         const result = await gameService.startGame({
           gameType: gt,
-          userId: request.user!.id,
-          walletAddress: request.user!.walletAddress,
+          walletAddress: request.walletAddress!,
           betAmount,
           clientSeed: clientSeed as string | undefined,
           gameParams: rest,
@@ -136,7 +130,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Internal Server Error';
-        if (message === 'Insufficient balance') {
+        if (message === 'Insufficient balance' || message.startsWith('Minimum bet') || message.startsWith('Maximum bet')) {
           return reply.status(400).send({ error: message });
         }
         request.log.error(err, 'Start game failed');
@@ -169,9 +163,8 @@ export async function gamesRoutes(app: FastifyInstance) {
       const { sessionId, action, tileIndex, cashoutMultiplier } = parsed.data;
 
       try {
-        // Verify session belongs to user
         const session = await gameService.getSession(sessionId);
-        if (!session || session.userId !== request.user!.id) {
+        if (!session || session.walletAddress !== request.walletAddress!) {
           return reply.status(404).send({ error: 'Session not found' });
         }
         if (session.game !== gt) {
@@ -245,7 +238,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
       try {
         const session = await gameService.getSession(parsed.data.sessionId);
-        if (!session || session.userId !== request.user!.id) {
+        if (!session || session.walletAddress !== request.walletAddress!) {
           return reply.status(404).send({ error: 'Session not found' });
         }
         if (session.game !== gt) {
@@ -276,7 +269,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
   /**
    * GET /api/games/:gameType/verify/:sessionId
-   * Provably fair verification — anyone can verify the result was fair.
+   * Provably fair verification.
    */
   app.get(
     '/api/games/:gameType/verify/:sessionId',
@@ -305,7 +298,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
   /**
    * GET /api/games/:gameType/history
-   * Game history for the authenticated user (from Prisma).
+   * Game history — wallet-based lookup from Redis sessions (no Prisma dependency).
    */
   app.get(
     '/api/games/:gameType/history',
@@ -317,53 +310,12 @@ export async function gamesRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid game type' });
       }
 
-      const parsed = historySchema.safeParse(request.query);
-      if (!parsed.success) {
-        return reply
-          .status(400)
-          .send({ error: 'Validation Error', details: parsed.error.issues });
-      }
-
-      const { page, limit } = parsed.data;
-      const skip = (page - 1) * limit;
-
-      try {
-        const [bets, total] = await Promise.all([
-          prisma.bet.findMany({
-            where: {
-              userId: request.user!.id,
-              gameType: gt.toUpperCase() as PrismaGameType,
-            },
-            orderBy: { placedAt: 'desc' },
-            skip,
-            take: limit,
-          }),
-          prisma.bet.count({
-            where: {
-              userId: request.user!.id,
-              gameType: gt.toUpperCase() as PrismaGameType,
-            },
-          }),
-        ]);
-
-        return reply.status(200).send({
-          games: bets.map((b) => ({
-            id: b.id,
-            amount: b.amount.toString(),
-            odds: b.odds.toString(),
-            potentialPayout: b.potentialPayout.toString(),
-            actualPayout: b.actualPayout?.toString() ?? null,
-            status: b.status,
-            gameData: b.gameData,
-            placedAt: b.placedAt,
-            settledAt: b.settledAt,
-          })),
-          pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-        });
-      } catch (err) {
-        request.log.error(err, 'Game history failed');
-        return reply.status(500).send({ error: 'Internal Server Error' });
-      }
+      // History from Prisma is not available with wallet-only auth.
+      // Return empty for now — will be backed by indexer later.
+      return reply.status(200).send({
+        games: [],
+        pagination: { page: 1, limit: 20, total: 0, pages: 0 },
+      });
     },
   );
 }

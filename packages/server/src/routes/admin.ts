@@ -47,6 +47,7 @@ export async function adminRoutes(app: FastifyInstance) {
         deposits: { total: totalDeposits, pending: pendingDeposits },
         withdrawals: { total: totalWithdrawals, pending: pendingWithdrawals },
         events: { upcoming: upcomingEvents },
+        currency: 'USDT',
       });
     } catch (err) {
       request.log.error(err, 'Admin overview failed');
@@ -110,13 +111,13 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   /**
-   * GET /api/admin/treasury - Treasury information.
+   * GET /api/admin/treasury - Treasury information (USDT).
    */
   app.get('/api/admin/treasury', { preHandler: adminPreHandlers }, async (request, reply) => {
     try {
       const [
-        totalDepositedBRL,
-        totalWithdrawnBRL,
+        totalDepositedUSDT,
+        totalWithdrawnUSDT,
         poolStats,
       ] = await Promise.all([
         prisma.deposit.aggregate({
@@ -135,11 +136,12 @@ export async function adminRoutes(app: FastifyInstance) {
       ]);
 
       return reply.status(200).send({
+        currency: 'USDT',
         deposits: {
-          totalBRL: totalDepositedBRL._sum.amountBRL?.toString() ?? '0',
+          totalUSDT: totalDepositedUSDT._sum.amountBRL?.toString() ?? '0',
         },
         withdrawals: {
-          totalBRL: totalWithdrawnBRL._sum.amountBRL?.toString() ?? '0',
+          totalUSDT: totalWithdrawnUSDT._sum.amountBRL?.toString() ?? '0',
         },
         pools: {
           count: poolStats._count,

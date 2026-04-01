@@ -1,57 +1,38 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from './prisma.js';
-
-export interface AuthUser {
-  id: string;
-  privyId: string;
-  walletAddress: string;
-  role: string;
-}
 
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: AuthUser;
+    walletAddress?: string;
   }
 }
 
 /**
- * Mock Privy JWT verification middleware.
- * Extracts userId from x-user-id header. Will be replaced with real Privy verification later.
+ * Auth middleware that extracts wallet address from request.
+ * For now (testnet): trust x-wallet-address header.
+ * For production: verify Privy JWT and extract wallet.
  */
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const userId = request.headers['x-user-id'] as string | undefined;
-
-  if (!userId) {
-    return reply.status(401).send({ error: 'Unauthorized', message: 'Missing x-user-id header' });
+  const walletAddress = request.headers['x-wallet-address'] as string;
+  if (!walletAddress || !walletAddress.startsWith('0x')) {
+    return reply.status(401).send({ error: 'Missing wallet address' });
   }
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, privyId: true, walletAddress: true, role: true },
-    });
-
-    if (!user) {
-      return reply.status(401).send({ error: 'Unauthorized', message: 'User not found' });
-    }
-
-    request.user = user;
-  } catch {
-    return reply.status(500).send({ error: 'Internal Server Error', message: 'Auth check failed' });
-  }
+  (request as any).walletAddress = walletAddress.toLowerCase();
 }
 
 /**
  * Admin-only middleware. Must be used after authMiddleware.
+ * For now, checks a hardcoded admin list. Replace with on-chain role check later.
  */
 export async function adminMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  if (!request.user || request.user.role !== 'ADMIN') {
+  // TODO: replace with on-chain role lookup or DB check
+  const adminWallets = (process.env.ADMIN_WALLETS || '').toLowerCase().split(',').filter(Boolean);
+  if (!request.walletAddress || !adminWallets.includes(request.walletAddress)) {
     return reply.status(403).send({ error: 'Forbidden', message: 'Admin access required' });
   }
 }

@@ -1,33 +1,55 @@
 import { redis } from '../lib/redis.js';
 
 const BALANCE_PREFIX = 'betcoin:balance:';
-const DEFAULT_FAUCET_AMOUNT = 10_000;
+// Faucet gives 1000 USDT = 100_000 cents
+const DEFAULT_FAUCET_AMOUNT_CENTS = 100_000;
 
 function key(walletAddress: string): string {
   return `${BALANCE_PREFIX}${walletAddress.toLowerCase()}`;
 }
 
 /**
- * Get demo balance for a wallet. Defaults to 0 if not set.
+ * Convert cents (internal) to USDT dollars (API display).
  */
-export async function getBalance(walletAddress: string): Promise<number> {
+export function centsToDollars(cents: number): number {
+  return Math.round(cents) / 100;
+}
+
+/**
+ * Convert USDT dollars to cents (internal storage).
+ */
+export function dollarsToCents(dollars: number): number {
+  return Math.round(dollars * 100);
+}
+
+/**
+ * Get demo balance for a wallet in cents. Defaults to 0 if not set.
+ */
+export async function getBalanceCents(walletAddress: string): Promise<number> {
   const raw = await redis.get(key(walletAddress));
   return raw ? Number(raw) : 0;
 }
 
 /**
- * Deduct balance atomically. Throws if insufficient funds.
- * Returns the new balance.
+ * Get demo balance for a wallet in USDT dollars.
+ */
+export async function getBalance(walletAddress: string): Promise<number> {
+  const cents = await getBalanceCents(walletAddress);
+  return centsToDollars(cents);
+}
+
+/**
+ * Deduct balance atomically (amount in cents). Throws if insufficient funds.
+ * Returns the new balance in cents.
  */
 export async function deductBalance(
   walletAddress: string,
-  amount: number,
+  amountCents: number,
 ): Promise<number> {
-  if (amount <= 0) throw new Error('Amount must be positive');
+  if (amountCents <= 0) throw new Error('Amount must be positive');
 
   const k = key(walletAddress);
 
-  // Use a Lua script for atomic check-and-deduct
   const lua = `
     local bal = tonumber(redis.call('GET', KEYS[1]) or '0')
     local amt = tonumber(ARGV[1])
@@ -39,7 +61,7 @@ export async function deductBalance(
     return newBal
   `;
 
-  const result = await redis.eval(lua, 1, k, amount.toString()) as number;
+  const result = await redis.eval(lua, 1, k, amountCents.toString()) as number;
 
   if (result === -1) {
     throw new Error('Insufficient balance');
@@ -49,13 +71,13 @@ export async function deductBalance(
 }
 
 /**
- * Add balance atomically. Returns the new balance.
+ * Add balance atomically (amount in cents). Returns the new balance in cents.
  */
 export async function addBalance(
   walletAddress: string,
-  amount: number,
+  amountCents: number,
 ): Promise<number> {
-  if (amount <= 0) throw new Error('Amount must be positive');
+  if (amountCents <= 0) throw new Error('Amount must be positive');
 
   const k = key(walletAddress);
 
@@ -66,14 +88,14 @@ export async function addBalance(
     return newBal
   `;
 
-  const result = await redis.eval(lua, 1, k, amount.toString()) as number;
+  const result = await redis.eval(lua, 1, k, amountCents.toString()) as number;
   return result;
 }
 
 /**
- * Faucet: give a wallet the default demo amount.
- * Returns the new balance.
+ * Faucet: give a wallet 1000 USDT (stored as cents).
+ * Returns the new balance in cents.
  */
 export async function faucet(walletAddress: string): Promise<number> {
-  return addBalance(walletAddress, DEFAULT_FAUCET_AMOUNT);
+  return addBalance(walletAddress, DEFAULT_FAUCET_AMOUNT_CENTS);
 }

@@ -20,16 +20,21 @@ export interface GameSession {
   game: GameType;
   userId: string;
   walletAddress: string;
-  betAmount: number;
+  betAmount: number; // in cents
   serverSeedHash: string;
   clientSeed: string;
   nonce: number;
   result: unknown;
-  payout: number;
+  payout: number; // in cents
   status: SessionStatus;
   createdAt: string;
   completedAt?: string;
 }
+
+// ─── Constants ──────────────────────────────────────────────────────
+
+const MIN_BET_CENTS = 10;       // 0.10 USDT
+const MAX_BET_CENTS = 1_000_000; // 10,000 USDT
 
 // ─── Redis keys ──────────────────────────────────────────────────────
 
@@ -81,13 +86,19 @@ function generateSessionId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * Convert payout cents to USDT dollars (2 decimal places).
+ */
+function centsToUsdt(cents: number): number {
+  return balance.centsToDollars(cents);
+}
+
 // ─── Start game ──────────────────────────────────────────────────────
 
 export interface StartGameParams {
   gameType: GameType;
-  userId: string;
   walletAddress: string;
-  betAmount: number;
+  betAmount: number; // in USDT dollars from API
   clientSeed?: string;
   gameParams: Record<string, unknown>;
 }
@@ -96,13 +107,20 @@ export interface StartGameResult {
   sessionId: string;
   serverSeedHash: string;
   nonce: number;
+  newBalance: number; // USDT dollars
 }
 
 export async function startGame(params: StartGameParams): Promise<StartGameResult> {
-  const { gameType, userId, walletAddress, betAmount, clientSeed, gameParams } = params;
+  const { gameType, walletAddress, betAmount, clientSeed, gameParams } = params;
 
-  // Deduct balance atomically
-  await balance.deductBalance(walletAddress, betAmount);
+  // Convert bet from USDT dollars to cents
+  const betCents = balance.dollarsToCents(betAmount);
+
+  if (betCents < MIN_BET_CENTS) throw new Error('Minimum bet is 0.10 USDT');
+  if (betCents > MAX_BET_CENTS) throw new Error('Maximum bet is 10000 USDT');
+
+  // Deduct balance atomically (in cents)
+  const newBalanceCents = await balance.deductBalance(walletAddress, betCents);
 
   const serverSeed = pf.generateServerSeed();
   const serverSeedHash = pf.hashServerSeed(serverSeed);
@@ -113,9 +131,9 @@ export async function startGame(params: StartGameParams): Promise<StartGameResul
   const session: GameSession = {
     id: sessionId,
     game: gameType,
-    userId,
+    userId: walletAddress, // wallet-based auth, no separate userId
     walletAddress,
-    betAmount,
+    betAmount: betCents,
     serverSeedHash,
     clientSeed: cs,
     nonce,
@@ -132,10 +150,15 @@ export async function startGame(params: StartGameParams): Promise<StartGameResul
 
   // For instant games, resolve immediately
   if (['coinflip', 'dice', 'slots', 'roulette'].includes(gameType)) {
-    return resolveInstantGame(session, serverSeed, gameParams);
+    return resolveInstantGame(session, serverSeed, gameParams, newBalanceCents);
   }
 
-  return { sessionId, serverSeedHash, nonce };
+  return {
+    sessionId,
+    serverSeedHash,
+    nonce,
+    newBalance: centsToUsdt(newBalanceCents),
+  };
 }
 
 // ─── Instant games ──────────────────────────────────────────────────
@@ -144,10 +167,11 @@ async function resolveInstantGame(
   session: GameSession,
   serverSeed: string,
   gameParams: Record<string, unknown>,
-): Promise<StartGameResult & { result: unknown; payout: number; won: boolean }> {
+  balanceCentsAfterBet: number,
+): Promise<StartGameResult & { result: unknown; payout: number; won: boolean; newBalance: number }> {
   const hash = pf.generateResult(serverSeed, session.clientSeed, session.nonce);
   let result: unknown;
-  let payout = 0;
+  let payoutCents = 0;
   let won = false;
 
   switch (session.game) {
@@ -155,7 +179,7 @@ async function resolveInstantGame(
       const side = pf.coinflipResult(hash);
       const chosen = gameParams['chosenSide'] as number;
       won = side === chosen;
-      payout = won ? session.betAmount * 1.96 : 0;
+      payoutCents = won ? Math.round(session.betAmount * 1.96) : 0;
       result = { side, chosen };
       break;
     }
@@ -165,7 +189,7 @@ async function resolveInstantGame(
       const isOver = gameParams['isOver'] as boolean;
       won = isOver ? roll > target : roll < target;
       const probability = isOver ? (99 - target) / 100 : target / 100;
-      payout = won ? (0.98 / probability) * session.betAmount : 0;
+      payoutCents = won ? Math.round((0.98 / probability) * session.betAmount) : 0;
       result = { roll, target, isOver };
       break;
     }
@@ -175,10 +199,10 @@ async function resolveInstantGame(
       const twoMatch =
         reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2];
       if (allMatch) {
-        payout = session.betAmount * 10;
+        payoutCents = session.betAmount * 10;
         won = true;
       } else if (twoMatch) {
-        payout = session.betAmount * 2;
+        payoutCents = session.betAmount * 2;
         won = true;
       }
       result = { reels };
@@ -190,30 +214,31 @@ async function resolveInstantGame(
       const betValue = gameParams['betValue'];
       const resolvedRoulette = resolveRouletteBet(number, betType, betValue);
       won = resolvedRoulette.won;
-      payout = won ? session.betAmount * resolvedRoulette.multiplier : 0;
+      payoutCents = won ? session.betAmount * resolvedRoulette.multiplier : 0;
       result = { number, betType, betValue };
       break;
     }
   }
 
-  if (payout > 0) {
-    await balance.addBalance(session.walletAddress, payout);
+  let finalBalanceCents = balanceCentsAfterBet;
+  if (payoutCents > 0) {
+    finalBalanceCents = await balance.addBalance(session.walletAddress, payoutCents);
   }
 
   session.result = result;
-  session.payout = payout;
+  session.payout = payoutCents;
   session.status = 'completed';
   session.completedAt = new Date().toISOString();
   await saveSession(session);
 
-  // Seed stays for verification but mark game done
   return {
     sessionId: session.id,
     serverSeedHash: session.serverSeedHash,
     nonce: session.nonce,
     result,
-    payout,
+    payout: centsToUsdt(payoutCents),
     won,
+    newBalance: centsToUsdt(finalBalanceCents),
   };
 }
 
@@ -257,6 +282,7 @@ export interface MinesActionResult {
   gameOver: boolean;
   payout?: number;
   minePositions?: number[];
+  newBalance?: number;
 }
 
 export async function minesReveal(
@@ -276,7 +302,6 @@ export async function minesReveal(
   const mineCount = (session.result as Record<string, unknown>)['mineCount'] as number;
   const minePositions = pf.minesResult(hash, mineCount);
 
-  // Track revealed tiles
   const state = session.result as Record<string, unknown>;
   const revealed: number[] = (state['revealedTiles'] as number[]) ?? [];
 
@@ -288,7 +313,6 @@ export async function minesReveal(
   revealed.push(tileIndex);
 
   if (isMine) {
-    // Game over — lost
     session.status = 'completed';
     session.payout = 0;
     session.completedAt = new Date().toISOString();
@@ -297,6 +321,8 @@ export async function minesReveal(
     session.result = state;
     await saveSession(session);
 
+    const currentBalanceCents = await balance.getBalanceCents(session.walletAddress);
+
     return {
       tileIndex,
       isMine: true,
@@ -304,28 +330,32 @@ export async function minesReveal(
       gameOver: true,
       payout: 0,
       minePositions,
+      newBalance: centsToUsdt(currentBalanceCents),
     };
   }
 
-  // Still alive
   state['revealedTiles'] = revealed;
   session.result = state;
   await saveSession(session);
+
+  const currentBalanceCents = await balance.getBalanceCents(session.walletAddress);
 
   return {
     tileIndex,
     isMine: false,
     revealedTiles: revealed,
     gameOver: false,
+    newBalance: centsToUsdt(currentBalanceCents),
   };
 }
 
 // ─── Mines/Crash: cashout ────────────────────────────────────────────
 
 export interface CashoutResult {
-  payout: number;
+  payout: number; // USDT dollars
   serverSeed: string;
   result: unknown;
+  newBalance: number; // USDT dollars
 }
 
 export async function cashout(sessionId: string): Promise<CashoutResult> {
@@ -337,7 +367,7 @@ export async function cashout(sessionId: string): Promise<CashoutResult> {
   if (!serverSeed) throw new Error('Game seed expired');
 
   const hash = pf.generateResult(serverSeed, session.clientSeed, session.nonce);
-  let payout = 0;
+  let payoutCents = 0;
 
   if (session.game === 'mines') {
     const state = session.result as Record<string, unknown>;
@@ -349,14 +379,12 @@ export async function cashout(sessionId: string): Promise<CashoutResult> {
       throw new Error('Must reveal at least one tile before cashing out');
     }
 
-    // Multiplier: product of (tiles_remaining / safe_remaining) for each reveal
     let multiplier = 1;
     for (let i = 0; i < revealed.length; i++) {
       multiplier *= (25 - i) / (safeTotal - i);
     }
-    // Apply 2% house edge
     multiplier *= 0.98;
-    payout = session.betAmount * multiplier;
+    payoutCents = Math.round(session.betAmount * multiplier);
 
     const minePositions = pf.minesResult(hash, mineCount);
     state['minePositions'] = minePositions;
@@ -367,10 +395,9 @@ export async function cashout(sessionId: string): Promise<CashoutResult> {
     const cashoutAt = state['cashoutAt'] as number | undefined;
 
     if (!cashoutAt || cashoutAt > crashPoint) {
-      // Crashed before cashout — should not normally reach here
-      payout = 0;
+      payoutCents = 0;
     } else {
-      payout = session.betAmount * cashoutAt;
+      payoutCents = Math.round(session.betAmount * cashoutAt);
     }
 
     state['crashPoint'] = crashPoint;
@@ -381,7 +408,7 @@ export async function cashout(sessionId: string): Promise<CashoutResult> {
     const path = pf.plinkoResult(hash, rows);
     const slot = path.reduce((sum, dir) => sum + dir, 0);
     const multiplier = plinkoMultiplier(rows, slot);
-    payout = session.betAmount * multiplier;
+    payoutCents = Math.round(session.betAmount * multiplier);
 
     state['path'] = path;
     state['slot'] = slot;
@@ -389,17 +416,25 @@ export async function cashout(sessionId: string): Promise<CashoutResult> {
     session.result = state;
   }
 
-  if (payout > 0) {
-    await balance.addBalance(session.walletAddress, payout);
+  let newBalanceCents: number;
+  if (payoutCents > 0) {
+    newBalanceCents = await balance.addBalance(session.walletAddress, payoutCents);
+  } else {
+    newBalanceCents = await balance.getBalanceCents(session.walletAddress);
   }
 
-  session.payout = payout;
+  session.payout = payoutCents;
   session.status = 'completed';
   session.completedAt = new Date().toISOString();
   await saveSession(session);
   await deleteSeed(sessionId);
 
-  return { payout, serverSeed, result: session.result };
+  return {
+    payout: centsToUsdt(payoutCents),
+    serverSeed,
+    result: session.result,
+    newBalance: centsToUsdt(newBalanceCents),
+  };
 }
 
 // ─── Crash: action ──────────────────────────────────────────────────
@@ -424,15 +459,12 @@ export async function crashAction(
 // ─── Plinko multipliers ─────────────────────────────────────────────
 
 function plinkoMultiplier(rows: number, slot: number): number {
-  // Symmetric multipliers for 12 rows (default)
   const multipliers12 = [
     141, 25, 8.1, 4, 2, 1.1, 0.3, 1.1, 2, 4, 8.1, 25, 141,
   ];
-  // For other row counts, scale linearly
   if (rows === 12) {
     return multipliers12[slot] ?? 0.3;
   }
-  // Generic: higher edges, lower center
   const center = rows / 2;
   const dist = Math.abs(slot - center);
   const ratio = dist / center;
@@ -454,7 +486,6 @@ export async function verifyGame(sessionId: string): Promise<VerifyResult> {
   const session = await getSession(sessionId);
   if (!session) throw new Error('Session not found');
 
-  // Only reveal seed after game is completed
   let serverSeed: string | null = null;
   let verified = false;
 

@@ -8,7 +8,7 @@ import {
 } from '../services/withdraw.service.js';
 
 const createWithdrawSchema = z.object({
-  amountBetCoin: z.number().positive('Amount must be positive'),
+  amountUSDT: z.number().positive('Amount must be positive'),
   pixKey: z.string().min(1, 'PIX key is required'),
   pixKeyType: z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'RANDOM']),
 });
@@ -37,8 +37,8 @@ export async function withdrawRoutes(app: FastifyInstance) {
 
     try {
       const result = await createWithdrawal({
-        userId: request.user!.id,
-        amountBetCoin: parsed.data.amountBetCoin,
+        userId: request.walletAddress!,
+        amountBetCoin: parsed.data.amountUSDT,
         pixKey: parsed.data.pixKey,
         pixKeyType: parsed.data.pixKeyType,
       });
@@ -67,7 +67,7 @@ export async function withdrawRoutes(app: FastifyInstance) {
     try {
       const result = await confirmWithdrawal({
         withdrawId: params.data.withdrawId,
-        userId: request.user!.id,
+        userId: request.walletAddress!,
         signedTx: body.data.signedTx,
       });
 
@@ -93,7 +93,7 @@ export async function withdrawRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await getWithdrawalStatus(params.data.withdrawId, request.user!.id);
+      const result = await getWithdrawalStatus(params.data.withdrawId, request.walletAddress!);
 
       if (!result) {
         return reply.status(404).send({ error: 'Withdrawal not found' });

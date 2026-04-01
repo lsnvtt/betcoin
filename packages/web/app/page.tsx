@@ -78,24 +78,24 @@ function FloatingElements() {
 
 export default function Home() {
   const steps = [
-    { icon: Coins, title: 'Compre BETPASS', desc: 'Adquira tokens BETPASS no lancamento por $1 cada' },
-    { icon: Lock, title: 'Faca Stake', desc: 'Trave seus tokens no pool de staking e comece a ganhar' },
-    { icon: TrendingUp, title: 'Receba Receita', desc: '25% de todas as taxas da plataforma sao distribuidas para stakers' },
+    { icon: Coins, title: 'Compre BETPASS', desc: 'Adquira tokens BETPASS no lançamento por $1 cada' },
+    { icon: Lock, title: 'Faça Stake', desc: 'Trave seus tokens no pool de staking e comece a ganhar' },
+    { icon: TrendingUp, title: 'Receba Receita', desc: '25% de todas as taxas da plataforma são distribuídas para stakers' },
   ];
 
   const games = [
     { icon: CircleDot, name: 'CoinFlip', desc: 'Cara ou Coroa', detail: 'Payout 1.96x', available: true },
-    { icon: Dices, name: 'Dice', desc: 'Dados 1-100', detail: 'Odds dinamicas ate 98x', available: true },
-    { icon: ChartLine, name: 'Crash', desc: 'Crash Game', detail: 'Cash out antes do crash', available: false },
+    { icon: Dices, name: 'Dice', desc: 'Dados 1-100', detail: 'Odds dinâmicas até 98x', available: true },
+    { icon: ChartLine, name: 'Crash', desc: 'Crash Game', detail: 'Cash out antes do crash', available: true },
     { icon: Trophy, name: 'Esportivas', desc: 'Apostas Esportivas', detail: 'Futebol, NBA, UFC', available: false },
-    { icon: Sparkles, name: 'Predictions', desc: 'Mercados Preditivos', detail: 'Previsoes descentralizadas', available: false },
+    { icon: Sparkles, name: 'Predictions', desc: 'Mercados Preditivos', detail: 'Previsões descentralizadas', available: false },
   ];
 
   const security = [
     { icon: Shield, title: 'Sem Login, Sem Cadastro', desc: 'Conecte apenas sua carteira. Sem email, sem senha, sem KYC. Privacidade total.' },
-    { icon: Code2, title: 'Codigo Open Source', desc: 'Contratos auditados e verificados na blockchain. Codigo aberto no GitHub.' },
-    { icon: Link2, title: 'Chainlink VRF', desc: 'Resultados gerados por oraculo descentralizado. Impossivel manipular.' },
-    { icon: Zap, title: 'Polygon Blockchain', desc: 'Transacoes em segundos, taxas de centavos. Sem intermediarios.' },
+    { icon: Code2, title: 'Código Open Source', desc: 'Contratos auditados e verificados na blockchain. Código aberto no GitHub.' },
+    { icon: Link2, title: 'Chainlink VRF', desc: 'Resultados gerados por oráculo descentralizado. Impossível manipular.' },
+    { icon: Zap, title: 'Polygon Blockchain', desc: 'Transações em segundos, taxas de centavos. Sem intermediários.' },
   ];
 
   const roadmap = [
@@ -192,9 +192,9 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { emoji: '🔒', title: 'Sem Login', desc: 'Conecte sua carteira e jogue. Sem email, sem senha, sem KYC.' },
-              { emoji: '👤', title: '100% Anonimo', desc: 'Nenhuma identificacao pessoal. Apenas sua wallet.' },
-              { emoji: '⏰', title: 'Investimento Limitado', desc: 'Pre-sale por tempo limitado. Quando acabar, acabou.' },
-              { emoji: '📊', title: 'Auditoria Independente', desc: 'Contratos auditados por empresa terceira antes do lancamento.' },
+              { emoji: '👤', title: '100% Anônimo', desc: 'Nenhuma identificação pessoal. Apenas sua wallet.' },
+              { emoji: '⏰', title: 'Investimento Limitado', desc: 'Pré-venda por tempo limitado. Quando acabar, acabou.' },
+              { emoji: '📊', title: 'Auditoria Independente', desc: 'Contratos auditados por empresa terceira antes do lançamento.' },
             ].map((item, i) => (
               <motion.div
                 key={item.title}
@@ -238,25 +238,6 @@ export default function Home() {
         </div>
       </Section>
 
-      {/* ───── GANHADORES AO VIVO (Social Proof) ───── */}
-      <Section>
-        <div className="max-w-5xl mx-auto">
-          <SectionTitle>Ganhadores em Tempo Real</SectionTitle>
-          <p className="text-center text-gray-400 -mt-10 mb-10">
-            Veja quem esta ganhando agora na plataforma
-          </p>
-          <LiveWinners />
-          <div className="mt-8 text-center">
-            <a
-              href="/coinflip"
-              className="inline-block px-8 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-betcoin-primary to-betcoin-primary-light shadow-glow-orange hover:shadow-[0_0_30px_rgba(247,147,26,0.4)] transition-all duration-300 hover:scale-105"
-            >
-              Comece a Jogar Agora
-            </a>
-          </div>
-        </div>
-      </Section>
-
       {/* ───── TOKENOMICS ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
@@ -292,7 +273,7 @@ export default function Home() {
                     <game.icon className="w-6 h-6 text-betcoin-primary" />
                   </div>
                   {game.available ? (
-                    <Badge text="Disponivel" variant="green" />
+                    <Badge text="Disponível" variant="green" />
                   ) : (
                     <Badge text="Em Breve" variant="orange" />
                   )}
@@ -308,7 +289,7 @@ export default function Home() {
       {/* ───── SECURITY ───── */}
       <Section>
         <div className="max-w-5xl mx-auto">
-          <SectionTitle>Seguranca e Transparencia</SectionTitle>
+          <SectionTitle>Segurança e Transparência</SectionTitle>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {security.map((item, i) => (
               <motion.div
@@ -356,7 +337,7 @@ export default function Home() {
                   <div className="glass-card p-6">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="font-mono text-betcoin-primary font-bold text-sm">{item.quarter}</span>
-                      {item.status === 'done' && <Badge text="Concluido" variant="green" />}
+                      {item.status === 'done' && <Badge text="Concluído" variant="green" />}
                       {item.status === 'progress' && <Badge text="Em Progresso" variant="orange" />}
                     </div>
                     <p className="text-white font-medium">{item.title}</p>
@@ -411,7 +392,7 @@ export default function Home() {
           </motion.a>
 
           <p className="mt-8 text-gray-500 text-sm">
-            Ja tem conta?{' '}
+            Já tem conta?{' '}
             <a href="/coinflip" className="text-betcoin-primary hover:underline">
               Acessar plataforma &rarr;
             </a>
@@ -428,7 +409,7 @@ export default function Home() {
             </h3>
             <div className="space-y-3 text-gray-400 text-sm leading-relaxed">
               <p>
-                <strong className="text-white">Investimento em criptoativos nao e garantia de retorno futuro.</strong> O valor dos tokens BETPASS e BETC pode variar significativamente e voce pode perder parte ou todo o capital investido.
+                <strong className="text-white">Investimento em criptoativos nao e garantia de retorno futuro.</strong> O valor dos tokens BETPASS pode variar significativamente e voce pode perder parte ou todo o capital investido. Apostas sao feitas em USDT.
               </p>
               <p>
                 Rentabilidades passadas nao sao indicativas de resultados futuros. O revenue share depende do volume de apostas na plataforma, que pode variar.
@@ -461,7 +442,7 @@ export default function Home() {
           </div>
           <div className="mt-8 text-center text-xs text-gray-600">
             <p>&copy; 2026 BetCoin. Todos os direitos reservados.</p>
-            <p className="mt-2">Investimento em criptoativos envolve riscos significativos. Rentabilidade passada nao e garantia de retorno futuro. Faca sua propria pesquisa (DYOR) antes de investir.</p>
+            <p className="mt-2">Investimento em criptoativos envolve riscos significativos. Rentabilidade passada não é garantia de retorno futuro. Faça sua própria pesquisa (DYOR) antes de investir.</p>
           </div>
         </div>
       </footer>

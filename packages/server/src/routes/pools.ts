@@ -13,12 +13,24 @@ const pnlQuerySchema = z.object({
 
 export async function poolsRoutes(app: FastifyInstance) {
   /**
-   * GET /api/pools/my - List user's pools.
+   * GET /api/pools/my - List user's pools (USDT).
    */
   app.get('/api/pools/my', { preHandler: [authMiddleware] }, async (request, reply) => {
     try {
+      const wallet = request.walletAddress!;
+
+      // Look up user by wallet to get pools
+      const user = await prisma.user.findFirst({
+        where: { walletAddress: wallet },
+        select: { id: true },
+      });
+
+      if (!user) {
+        return reply.status(200).send({ pools: [], currency: 'USDT' });
+      }
+
       const pools = await prisma.pool.findMany({
-        where: { ownerId: request.user!.id },
+        where: { ownerId: user.id },
         orderBy: { createdAt: 'desc' },
         include: {
           _count: { select: { bets: true } },
@@ -26,6 +38,7 @@ export async function poolsRoutes(app: FastifyInstance) {
       });
 
       return reply.status(200).send({
+        currency: 'USDT',
         pools: pools.map((p) => ({
           id: p.id,
           contractAddress: p.contractAddress,
@@ -47,7 +60,7 @@ export async function poolsRoutes(app: FastifyInstance) {
   });
 
   /**
-   * GET /api/pools/:address/pnl - Pool P&L data.
+   * GET /api/pools/:address/pnl - Pool P&L data (USDT).
    */
   app.get('/api/pools/:address/pnl', { preHandler: [authMiddleware] }, async (request, reply) => {
     const params = addressSchema.safeParse(request.params);
@@ -69,9 +82,19 @@ export async function poolsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Pool not found' });
       }
 
-      // Verify ownership
-      if (pool.ownerId !== request.user!.id && request.user!.role !== 'ADMIN') {
-        return reply.status(403).send({ error: 'Forbidden' });
+      // Verify ownership via wallet
+      const wallet = request.walletAddress!;
+      const user = await prisma.user.findFirst({
+        where: { walletAddress: wallet },
+        select: { id: true },
+      });
+
+      if (!user || (pool.ownerId !== user.id)) {
+        // Check if admin via env
+        const adminWallets = (process.env.ADMIN_WALLETS || '').toLowerCase().split(',').filter(Boolean);
+        if (!adminWallets.includes(wallet)) {
+          return reply.status(403).send({ error: 'Forbidden' });
+        }
       }
 
       const since = new Date(Date.now() - query.data.days * 24 * 60 * 60 * 1000);
@@ -84,6 +107,7 @@ export async function poolsRoutes(app: FastifyInstance) {
       return reply.status(200).send({
         poolId: pool.id,
         contractAddress: pool.contractAddress,
+        currency: 'USDT',
         snapshots: snapshots.map((s) => ({
           date: s.date,
           pnl: s.pnl.toString(),
@@ -100,7 +124,7 @@ export async function poolsRoutes(app: FastifyInstance) {
   });
 
   /**
-   * GET /api/pools/:address/exposure - Pool exposure data.
+   * GET /api/pools/:address/exposure - Pool exposure data (USDT).
    */
   app.get('/api/pools/:address/exposure', { preHandler: [authMiddleware] }, async (request, reply) => {
     const params = addressSchema.safeParse(request.params);
@@ -118,11 +142,20 @@ export async function poolsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Pool not found' });
       }
 
-      if (pool.ownerId !== request.user!.id && request.user!.role !== 'ADMIN') {
-        return reply.status(403).send({ error: 'Forbidden' });
+      // Verify ownership via wallet
+      const wallet = request.walletAddress!;
+      const user = await prisma.user.findFirst({
+        where: { walletAddress: wallet },
+        select: { id: true },
+      });
+
+      if (!user || (pool.ownerId !== user.id)) {
+        const adminWallets = (process.env.ADMIN_WALLETS || '').toLowerCase().split(',').filter(Boolean);
+        if (!adminWallets.includes(wallet)) {
+          return reply.status(403).send({ error: 'Forbidden' });
+        }
       }
 
-      // Get pending bets for exposure calculation
       const pendingBets = await prisma.bet.findMany({
         where: { poolId: pool.id, status: 'PENDING' },
         include: {
@@ -140,6 +173,7 @@ export async function poolsRoutes(app: FastifyInstance) {
       return reply.status(200).send({
         poolId: pool.id,
         contractAddress: pool.contractAddress,
+        currency: 'USDT',
         totalDeposited: pool.totalDeposited.toString(),
         totalLocked: pool.totalLocked.toString(),
         totalExposure: totalExposure.toString(),

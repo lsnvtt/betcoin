@@ -111,7 +111,14 @@ export async function betsRoutes(app: FastifyInstance) {
     const { status, gameType, page, limit } = parsed.data;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, any> = { userId: request.user!.id };
+    // Look up user by wallet address for Prisma queries
+    const wallet = request.walletAddress!;
+    const user = await prisma.user.findFirst({ where: { walletAddress: wallet }, select: { id: true } });
+    if (!user) {
+      return reply.status(200).send({ bets: [], pagination: { page: 1, limit: 20, total: 0, pages: 0 } });
+    }
+
+    const where: Record<string, any> = { userId: user.id };
     if (status) where.status = status;
     if (gameType) where.gameType = gameType;
 
