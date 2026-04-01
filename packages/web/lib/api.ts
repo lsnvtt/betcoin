@@ -2,15 +2,21 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 async function fetchApi<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit & { walletAddress?: string }
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (options?.walletAddress) {
+    headers['x-wallet-address'] = options.walletAddress;
+  }
+  if (options?.headers) {
+    Object.assign(headers, options.headers);
+  }
   const res = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
     ...options,
+    headers,
   });
 
   if (!res.ok) {
@@ -25,7 +31,79 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
-// Events
+// ─── Balance ───
+export async function getBalance(walletAddress: string): Promise<number> {
+  const data = await fetchApi<{ balance: number }>('/api/balance', {
+    walletAddress,
+  });
+  return data.balance;
+}
+
+export async function faucet(walletAddress: string): Promise<number> {
+  const data = await fetchApi<{ balance: number }>('/api/faucet', {
+    method: 'POST',
+    walletAddress,
+  });
+  return data.balance;
+}
+
+// ─── Games (unified pattern) ───
+export interface GameStartResponse {
+  sessionId: string;
+  serverSeedHash: string;
+  result?: unknown;
+  payout?: number;
+  newBalance?: number;
+}
+
+export async function startGame(
+  walletAddress: string,
+  gameType: string,
+  params: Record<string, unknown>
+): Promise<GameStartResponse> {
+  return fetchApi<GameStartResponse>(`/api/games/${gameType}/start`, {
+    method: 'POST',
+    walletAddress,
+    body: JSON.stringify(params),
+  });
+}
+
+export async function gameAction(
+  sessionId: string,
+  gameType: string,
+  action: string,
+  params?: Record<string, unknown>
+): Promise<GameStartResponse> {
+  return fetchApi<GameStartResponse>(`/api/games/${gameType}/action`, {
+    method: 'POST',
+    body: JSON.stringify({ sessionId, action, ...params }),
+  });
+}
+
+export async function gameCashout(
+  sessionId: string,
+  gameType: string
+): Promise<GameStartResponse> {
+  return fetchApi<GameStartResponse>(`/api/games/${gameType}/cashout`, {
+    method: 'POST',
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
+export async function verifyGame(
+  sessionId: string,
+  gameType: string
+): Promise<{
+  serverSeed: string;
+  clientSeed: string;
+  nonce: number;
+  result: unknown;
+  hash: string;
+}> {
+  return fetchApi(`/api/games/${gameType}/verify/${sessionId}`);
+}
+
+// ─── Events ───
 export async function getEvents(params?: {
   sport?: string;
   league?: string;
@@ -43,7 +121,7 @@ export async function getEvent(id: string) {
   return fetchApi<Event>(`/api/events/${id}`);
 }
 
-// Bets
+// ─── Bets ───
 export async function getMyBets(token: string) {
   return fetchApi<Bet[]>('/api/bets/my', {
     headers: authHeaders(token),
@@ -65,31 +143,7 @@ export async function prepareBet(
   });
 }
 
-// CoinFlip
-export async function playCoinFlip(
-  token: string,
-  data: { choice: 'heads' | 'tails'; amount: string }
-) {
-  return fetchApi<CoinFlipResult>('/api/games/coinflip', {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-// Dice
-export async function playDice(
-  token: string,
-  data: { target: number; isOver: boolean; amount: string }
-) {
-  return fetchApi<DiceResult>('/api/games/dice', {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-// Deposits
+// ─── Deposits ───
 export async function createDeposit(
   token: string,
   data: { amount: string; txHash?: string }
@@ -107,14 +161,7 @@ export async function getDepositStatus(token: string, depositId: string) {
   });
 }
 
-// Balance
-export async function getBalance(token: string) {
-  return fetchApi<{ balance: string }>('/api/balance', {
-    headers: authHeaders(token),
-  });
-}
-
-// Pools
+// ─── Pools ───
 export async function getPools(token: string) {
   return fetchApi<Pool[]>('/api/pools', {
     headers: authHeaders(token),
@@ -132,14 +179,14 @@ export async function createPool(
   });
 }
 
-// Admin
+// ─── Admin ───
 export async function getAdminStats(token: string) {
   return fetchApi<AdminStats>('/api/admin/stats', {
     headers: authHeaders(token),
   });
 }
 
-// Types
+// ─── Types ───
 export interface Event {
   id: string;
   name: string;

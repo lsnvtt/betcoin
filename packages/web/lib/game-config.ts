@@ -44,37 +44,3 @@ export function getAllGameConfigs(): Record<string, GameConfig> {
   }
   return configs;
 }
-
-// Calculate win probability based on house edge
-// Returns a number 0-1 for use with Math.random()
-export function getWinProbability(game: string, baseProbability: number): number {
-  const config = getGameConfig(game);
-  const houseEdge = config.houseEdgeBps / 10000; // convert bps to decimal
-  return baseProbability * (1 - houseEdge);
-}
-
-// Demo balance management
-const DEMO_BALANCE_KEY = 'betcoin_demo_balance';
-const DEFAULT_DEMO_BALANCE = 10000;
-
-export function getDemoBalance(): number {
-  if (typeof window === 'undefined') return DEFAULT_DEMO_BALANCE;
-  const stored = localStorage.getItem(DEMO_BALANCE_KEY);
-  return stored ? parseFloat(stored) : DEFAULT_DEMO_BALANCE;
-}
-
-export function setDemoBalance(balance: number): void {
-  localStorage.setItem(DEMO_BALANCE_KEY, balance.toString());
-  window.dispatchEvent(new CustomEvent('demo-balance-changed', { detail: balance }));
-}
-
-export function adjustDemoBalance(delta: number): number {
-  const current = getDemoBalance();
-  const newBalance = Math.max(0, current + delta);
-  setDemoBalance(newBalance);
-  return newBalance;
-}
-
-export function resetDemoBalance(): void {
-  setDemoBalance(DEFAULT_DEMO_BALANCE);
-}

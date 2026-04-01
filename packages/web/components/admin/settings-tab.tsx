@@ -55,11 +55,11 @@ export function SettingsTab() {
           <CardContent>
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-400 mb-2 block">Aposta Minima (BETC)</label>
+                <label className="text-sm text-gray-400 mb-2 block">Aposta Minima (USDT)</label>
                 <Input type="number" value={minBet} onChange={(e) => setMinBet(e.target.value)} className="font-mono" />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-2 block">Aposta Maxima (BETC)</label>
+                <label className="text-sm text-gray-400 mb-2 block">Aposta Maxima (USDT)</label>
                 <Input type="number" value={maxBet} onChange={(e) => setMaxBet(e.target.value)} className="font-mono" />
               </div>
             </div>

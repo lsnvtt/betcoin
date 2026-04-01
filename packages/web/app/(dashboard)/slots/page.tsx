@@ -3,43 +3,37 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Sparkles, Zap, RotateCcw } from 'lucide-react';
-import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
+import { startGame, getBalance } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatBetCoin, cn } from '@/lib/utils';
+import { formatUSDT, cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SYMBOLS = ['BETC', 'ETH', 'MATIC', 'Diamond', '7', 'Cherry', 'Bell', 'Star', 'Wild'];
+const SYMBOLS = ['USDT', 'ETH', 'MATIC', 'Diamond', '7', 'Cherry', 'Bell', 'Star', 'Wild'];
 const SYMBOL_DISPLAY: Record<string, string> = {
-  BETC: '₿', ETH: 'Ξ', MATIC: '◈', Diamond: '💎',
-  '7': '7️⃣', Cherry: '🍒', Bell: '🔔', Star: '⭐', Wild: '🪙',
+  USDT: '$', ETH: 'E', MATIC: 'M', Diamond: 'D',
+  '7': '7', Cherry: 'C', Bell: 'B', Star: 'S', Wild: 'W',
 };
 const PAYOUTS: Record<string, number> = {
-  BETC: 50, ETH: 25, MATIC: 15, Diamond: 100,
+  USDT: 50, ETH: 25, MATIC: 15, Diamond: 100,
   '7': 20, Cherry: 5, Bell: 10, Star: 8, Wild: 0,
 };
 const quickAmounts = ['10', '50', '100', '500', '1000'];
 
-function getRandomSymbol() {
-  return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
-}
-
-function generateGrid(): string[][] {
+function generatePlaceholderGrid(): string[][] {
   return Array.from({ length: 3 }, () =>
-    Array.from({ length: 3 }, () => getRandomSymbol())
+    Array.from({ length: 3 }, () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)])
   );
 }
 
 function checkWins(grid: string[][]): { positions: [number, number][]; multiplier: number }[] {
   const wins: { positions: [number, number][]; multiplier: number }[] = [];
-  // Horizontal lines
   for (let r = 0; r < 3; r++) {
     const row = grid[r].map((s) => (s === 'Wild' ? grid[r].find((x) => x !== 'Wild') || s : s));
     if (row[0] === row[1] && row[1] === row[2]) {
       wins.push({ positions: [[r, 0], [r, 1], [r, 2]], multiplier: PAYOUTS[row[0]] || 5 });
     }
   }
-  // Diagonals
   const tl = grid[0][0] === 'Wild' ? grid[1][1] : grid[0][0];
   const mid = grid[1][1] === 'Wild' ? tl : grid[1][1];
   const br = grid[2][2] === 'Wild' ? mid : grid[2][2];
@@ -52,7 +46,6 @@ function checkWins(grid: string[][]): { positions: [number, number][]; multiplie
   if (tr === mid2 && mid2 === bl && tr) {
     wins.push({ positions: [[0, 2], [1, 1], [2, 0]], multiplier: PAYOUTS[tr] || 5 });
   }
-  // Scatter: 3 diamonds = free spins
   let diamonds = 0;
   const dPos: [number, number][] = [];
   for (let r = 0; r < 3; r++) {
@@ -67,9 +60,10 @@ function checkWins(grid: string[][]): { positions: [number, number][]; multiplie
 }
 
 export default function SlotsPage() {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
   const [amount, setAmount] = useState('10');
-  const [grid, setGrid] = useState<string[][]>(generateGrid);
+  const [grid, setGrid] = useState<string[][]>(generatePlaceholderGrid);
   const [spinning, setSpinning] = useState(false);
   const [colDone, setColDone] = useState([true, true, true]);
   const [wins, setWins] = useState<ReturnType<typeof checkWins>>([]);
@@ -79,71 +73,74 @@ export default function SlotsPage() {
   const autoRef = useRef(0);
   const [balance, setBalance] = useState(0);
   const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { setBalance(getDemoBalance()); }, []);
+  const refreshBalance = useCallback(async () => {
+    if (!walletAddress) return;
+    try { setBalance(await getBalance(walletAddress)); } catch { /* ignore */ }
+  }, [walletAddress]);
 
+  useEffect(() => { refreshBalance(); }, [refreshBalance]);
   useEffect(() => {
-    const handler = () => setBalance(getDemoBalance());
-    window.addEventListener('demo-balance-changed', handler);
-    return () => window.removeEventListener('demo-balance-changed', handler);
-  }, []);
+    const handler = () => refreshBalance();
+    window.addEventListener('balance-updated', handler);
+    return () => window.removeEventListener('balance-updated', handler);
+  }, [refreshBalance]);
 
   const betAmount = parseFloat(amount || '0');
 
-  const spin = useCallback(() => {
+  const spin = useCallback(async () => {
     if (!authenticated) { login(); return; }
-    if (spinning) return;
-    if (betAmount <= 0 || betAmount > getDemoBalance()) return;
+    if (spinning || !walletAddress) return;
+    if (betAmount <= 0 || betAmount > balance) return;
     setSpinning(true);
     setWins([]);
     setLastPayout(null);
     setBalanceDelta(null);
     setColDone([false, false, false]);
+    setError(null);
 
-    // Deduct bet
-    setBalance(adjustDemoBalance(-betAmount));
+    try {
+      const response = await startGame(walletAddress, 'slots', { betAmount });
+      const resultGrid = (response.result as { grid: string[][] })?.grid || generatePlaceholderGrid();
+      const payoutVal = response.payout || 0;
+      const newBal = response.newBalance ?? balance;
 
-    const newGrid = generateGrid();
+      // Stagger columns
+      [0, 1, 2].forEach((col) => {
+        setTimeout(() => {
+          setGrid((prev) => {
+            const g = prev.map((r) => [...r]);
+            for (let r = 0; r < 3; r++) g[r][col] = resultGrid[r][col];
+            return g;
+          });
+          setColDone((prev) => { const n = [...prev]; n[col] = true; return n; });
+        }, 600 + col * 400);
+      });
 
-    // Stagger columns
-    [0, 1, 2].forEach((col) => {
       setTimeout(() => {
-        setGrid((prev) => {
-          const g = prev.map((r) => [...r]);
-          for (let r = 0; r < 3; r++) g[r][col] = newGrid[r][col];
-          return g;
-        });
-        setColDone((prev) => { const n = [...prev]; n[col] = true; return n; });
-      }, 600 + col * 400);
-    });
-
-    setTimeout(() => {
-      const w = checkWins(newGrid);
-      setWins(w);
-      const totalMult = w.reduce((s, x) => s + x.multiplier, 0);
-      const payout = totalMult > 0 ? betAmount * totalMult / 10 : 0;
-      if (payout > 0) {
-        setBalance(adjustDemoBalance(payout));
-        setBalanceDelta(payout - betAmount);
-      } else {
-        setBalanceDelta(-betAmount);
-      }
-      setLastPayout(payout > 0 ? payout : -betAmount);
-      setHistory((prev) => [{ id: Date.now(), payout: payout > 0 ? payout : -betAmount }, ...prev.slice(0, 19)]);
+        const w = checkWins(resultGrid);
+        setWins(w);
+        const net = payoutVal > 0 ? payoutVal - betAmount : -betAmount;
+        setLastPayout(payoutVal > 0 ? payoutVal : -betAmount);
+        setBalanceDelta(net);
+        setBalance(newBal);
+        window.dispatchEvent(new Event('balance-updated'));
+        setHistory((prev) => [{ id: Date.now(), payout: payoutVal > 0 ? payoutVal : -betAmount }, ...prev.slice(0, 19)]);
+        setSpinning(false);
+      }, 1800);
+    } catch (err) {
       setSpinning(false);
-    }, 1800);
-  }, [authenticated, login, spinning, amount, betAmount]);
+      setColDone([true, true, true]);
+      setError(err instanceof Error ? err.message : 'Erro de conexao');
+      await refreshBalance();
+    }
+  }, [authenticated, login, spinning, amount, betAmount, walletAddress, balance, refreshBalance]);
 
-  useEffect(() => {
-    autoRef.current = autoSpins;
-  }, [autoSpins]);
-
+  useEffect(() => { autoRef.current = autoSpins; }, [autoSpins]);
   useEffect(() => {
     if (!spinning && autoRef.current > 0) {
-      const t = setTimeout(() => {
-        setAutoSpins((p) => p - 1);
-        spin();
-      }, 1000);
+      const t = setTimeout(() => { setAutoSpins((p) => p - 1); spin(); }, 1000);
       return () => clearTimeout(t);
     }
   }, [spinning, spin]);
@@ -163,12 +160,12 @@ export default function SlotsPage() {
         </h1>
         <div className="text-right">
           <p className="text-xs text-gray-500">Saldo</p>
-          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <p className="text-lg font-bold font-mono text-white">{formatUSDT(balance)}</p>
           <AnimatePresence>
             {balanceDelta !== null && !spinning && (
               <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+                {balanceDelta >= 0 ? `+${formatUSDT(balanceDelta)}` : formatUSDT(balanceDelta)}
               </motion.p>
             )}
           </AnimatePresence>
@@ -176,65 +173,51 @@ export default function SlotsPage() {
         <p className="text-gray-400 mt-2">Slot machine cripto com paylines e multiplicadores. RTP: 96%</p>
       </motion.div>
 
+      {error && (
+        <div className="mb-4 p-3 rounded-xl bg-betcoin-red/10 border border-betcoin-red/20 text-betcoin-red-light text-sm">{error}</div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Slot Grid */}
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
             <div className="grid grid-cols-3 gap-3 mb-6">
               {grid.map((row, r) =>
                 row.map((sym, c) => (
-                  <motion.div
-                    key={`${r}-${c}`}
+                  <motion.div key={`${r}-${c}`}
                     animate={{
                       scale: !colDone[c] ? [1, 0.8, 1] : isWinPos(r, c) ? [1, 1.1, 1] : 1,
                       rotateX: !colDone[c] ? [0, 360] : 0,
                     }}
-                    transition={{
-                      duration: !colDone[c] ? 0.4 : 0.6,
-                      repeat: !colDone[c] ? Infinity : 0,
-                    }}
+                    transition={{ duration: !colDone[c] ? 0.4 : 0.6, repeat: !colDone[c] ? Infinity : 0 }}
                     className={cn(
                       'aspect-square rounded-xl flex items-center justify-center text-4xl border-2 transition-all',
-                      isWinPos(r, c)
-                        ? 'border-betcoin-primary bg-betcoin-primary/20 shadow-[0_0_20px_rgba(247,147,26,0.4)]'
-                        : 'border-white/10 bg-white/5'
-                    )}
-                  >
+                      isWinPos(r, c) ? 'border-betcoin-primary bg-betcoin-primary/20 shadow-[0_0_20px_rgba(247,147,26,0.4)]' : 'border-white/10 bg-white/5'
+                    )}>
                     {SYMBOL_DISPLAY[sym]}
                   </motion.div>
                 ))
               )}
             </div>
 
-            {/* Result */}
             <AnimatePresence>
               {lastPayout !== null && !spinning && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className={cn(
-                    'text-center py-3 rounded-xl mb-4 border',
-                    lastPayout > 0 ? 'bg-betcoin-accent/10 border-betcoin-accent/20' : 'bg-betcoin-red/10 border-betcoin-red/20'
-                  )}
-                >
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                  className={cn('text-center py-3 rounded-xl mb-4 border',
+                    lastPayout > 0 ? 'bg-betcoin-accent/10 border-betcoin-accent/20' : 'bg-betcoin-red/10 border-betcoin-red/20')}>
                   <p className={cn('text-2xl font-bold font-mono', lastPayout > 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                    {lastPayout > 0 ? `+${formatBetCoin(lastPayout)}` : formatBetCoin(lastPayout)}
+                    {lastPayout > 0 ? `+${formatUSDT(lastPayout)}` : formatUSDT(lastPayout)}
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Bet Controls */}
             <div className="space-y-3 mb-4">
               <label className="text-sm text-gray-400 font-medium">Valor da Aposta</label>
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min="1" disabled={spinning} className="font-mono" />
               <div className="flex gap-2 flex-wrap">
                 {quickAmounts.map((val) => (
                   <Button key={val} variant="outline" size="sm" onClick={() => setAmount(val)} disabled={spinning}
-                    className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>
-                    {val}
-                  </Button>
+                    className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>{val}</Button>
                 ))}
               </div>
             </div>
@@ -248,24 +231,19 @@ export default function SlotsPage() {
               </Button>
             </div>
 
-            {/* Auto-spin */}
             <div className="flex gap-2 mt-3">
               <span className="text-xs text-gray-500 self-center">Auto:</span>
               {[5, 10, 25].map((n) => (
-                <Button key={n} variant="ghost" size="sm" onClick={() => { setAutoSpins(n); spin(); }} disabled={spinning || autoSpins > 0}
-                  className="text-xs">
+                <Button key={n} variant="ghost" size="sm" onClick={() => { setAutoSpins(n); spin(); }} disabled={spinning || autoSpins > 0} className="text-xs">
                   <RotateCcw className="h-3 w-3 mr-1" />{n}
                 </Button>
               ))}
               {autoSpins > 0 && (
-                <Button variant="destructive" size="sm" onClick={() => setAutoSpins(0)} className="text-xs ml-auto">
-                  Parar ({autoSpins})
-                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setAutoSpins(0)} className="text-xs ml-auto">Parar ({autoSpins})</Button>
               )}
             </div>
           </div>
 
-          {/* Payout Table */}
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Zap className="h-4 w-4 text-betcoin-primary" /> Tabela de Pagamentos
@@ -291,7 +269,6 @@ export default function SlotsPage() {
           </div>
         </div>
 
-        {/* History Sidebar */}
         <div className="space-y-4">
           <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Historico</h3>
           <div className="flex flex-wrap gap-1.5 mb-4">
@@ -307,7 +284,7 @@ export default function SlotsPage() {
                 className="bg-white/5 border border-white/5 rounded-xl px-3 py-2.5 flex items-center justify-between">
                 <span className="text-xs text-gray-400">Slot</span>
                 <span className={cn('text-xs font-mono font-semibold', entry.payout > 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                  {entry.payout > 0 ? `+${formatBetCoin(entry.payout)}` : formatBetCoin(entry.payout)}
+                  {entry.payout > 0 ? `+${formatUSDT(entry.payout)}` : formatUSDT(entry.payout)}
                 </span>
               </motion.div>
             ))}

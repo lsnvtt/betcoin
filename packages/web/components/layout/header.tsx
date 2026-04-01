@@ -5,7 +5,7 @@ import { Coins, LogOut, Wallet, Menu, Pencil, Check, X, Droplets } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { shortenAddress } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getDemoBalance, resetDemoBalance } from '@/lib/game-config';
+import { getBalance as fetchBalance, faucet as apiFaucet } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface HeaderProps {
@@ -36,38 +36,52 @@ function useNickname(walletAddress: string | undefined) {
 }
 
 export function Header({ onToggleSidebar }: HeaderProps) {
-  const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
+  const { ready, authenticated, user, login, logout } = usePrivy();
   const [balance, setBalance] = useState<number>(0);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [faucetUsed, setFaucetUsed] = useState(false);
+  const [faucetLoading, setFaucetLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const walletAddress = user?.wallet?.address;
   const { nickname, saveNickname } = useNickname(walletAddress);
 
-  const refreshBalance = useCallback(() => {
-    setBalance(getDemoBalance());
-  }, []);
+  const refreshBalance = useCallback(async () => {
+    if (!walletAddress) return;
+    try {
+      const bal = await fetchBalance(walletAddress);
+      setBalance(bal);
+    } catch {
+      // silently fail — backend may be down
+    }
+  }, [walletAddress]);
 
   useEffect(() => {
     refreshBalance();
     const handler = () => refreshBalance();
-    window.addEventListener('demo-balance-changed', handler);
-    window.addEventListener('storage', handler);
-    const interval = setInterval(refreshBalance, 1000);
+    window.addEventListener('balance-updated', handler);
+    const interval = setInterval(refreshBalance, 3000);
     return () => {
-      window.removeEventListener('demo-balance-changed', handler);
-      window.removeEventListener('storage', handler);
+      window.removeEventListener('balance-updated', handler);
       clearInterval(interval);
     };
   }, [refreshBalance]);
 
-  const handleFaucet = () => {
-    resetDemoBalance();
-    refreshBalance();
-    setFaucetUsed(true);
-    setTimeout(() => setFaucetUsed(false), 2000);
+  const handleFaucet = async () => {
+    if (!walletAddress || faucetLoading) return;
+    setFaucetLoading(true);
+    try {
+      const newBal = await apiFaucet(walletAddress);
+      setBalance(newBal);
+      setFaucetUsed(true);
+      setTimeout(() => setFaucetUsed(false), 2000);
+      window.dispatchEvent(new Event('balance-updated'));
+    } catch {
+      // silently fail
+    } finally {
+      setFaucetLoading(false);
+    }
   };
 
   const displayName = nickname || (walletAddress ? shortenAddress(walletAddress) : '');
@@ -113,7 +127,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               <Coins className="relative h-4 w-4 text-betcoin-primary" />
             </div>
             <span className="text-sm font-bold font-mono text-betcoin-primary">
-              {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} BETC
+              {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
             </span>
           </motion.div>
         )}
@@ -125,6 +139,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleFaucet}
+            disabled={faucetLoading}
             className={`hidden sm:flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all duration-300 ${
               faucetUsed
                 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -132,7 +147,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             }`}
           >
             <Droplets className="h-3.5 w-3.5" />
-            {faucetUsed ? '+10.000 BETC!' : 'Faucet Demo'}
+            {faucetUsed ? '+1.000 USDT!' : faucetLoading ? 'Carregando...' : 'Faucet 1000 USDT'}
           </motion.button>
         )}
 

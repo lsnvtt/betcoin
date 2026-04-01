@@ -3,10 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { TrendingUp, Zap } from 'lucide-react';
-import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
+import { startGame, gameCashout, getBalance } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatBetCoin, cn } from '@/lib/utils';
+import { formatUSDT, cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type GameStatus = 'waiting' | 'running' | 'crashed';
@@ -21,11 +21,6 @@ interface Participant {
   cashedAt: number | null;
 }
 
-function generateCrashPoint(): number {
-  const r = Math.random();
-  return Math.max(1.0, Math.floor((1 / (1 - r)) * 100) / 100);
-}
-
 function generateParticipants(): Participant[] {
   const count = 5 + Math.floor(Math.random() * 8);
   return Array.from({ length: count }, (_, i) => ({
@@ -37,7 +32,8 @@ function generateParticipants(): Participant[] {
 }
 
 export default function CrashPage() {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
   const [amount, setAmount] = useState('50');
   const [autoCashout, setAutoCashout] = useState('2.00');
   const [status, setStatus] = useState<GameStatus>('waiting');
@@ -45,23 +41,29 @@ export default function CrashPage() {
   const [crashPoint, setCrashPoint] = useState(0);
   const [cashedOut, setCashedOut] = useState(false);
   const [cashoutMultiplier, setCashoutMultiplier] = useState(0);
-  const [history, setHistory] = useState<number[]>([2.34, 1.12, 5.67, 1.01, 3.45, 1.87, 15.2, 1.45, 2.1, 1.03, 4.5, 1.89, 2.78, 1.15, 8.9, 1.33, 3.22, 1.67, 2.01, 1.5]);
+  const [history, setHistory] = useState<number[]>([2.34, 1.12, 5.67, 1.01, 3.45, 1.87, 15.2, 1.45, 2.1, 1.03]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [shake, setShake] = useState(false);
   const [balance, setBalance] = useState(0);
   const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const startTime = useRef(0);
   const crashRef = useRef(0);
 
-  useEffect(() => { setBalance(getDemoBalance()); }, []);
+  const refreshBalance = useCallback(async () => {
+    if (!walletAddress) return;
+    try { setBalance(await getBalance(walletAddress)); } catch { /* ignore */ }
+  }, [walletAddress]);
 
+  useEffect(() => { refreshBalance(); }, [refreshBalance]);
   useEffect(() => {
-    const handler = () => setBalance(getDemoBalance());
-    window.addEventListener('demo-balance-changed', handler);
-    return () => window.removeEventListener('demo-balance-changed', handler);
-  }, []);
+    const handler = () => refreshBalance();
+    window.addEventListener('balance-updated', handler);
+    return () => window.removeEventListener('balance-updated', handler);
+  }, [refreshBalance]);
 
   const betAmount = parseFloat(amount || '0');
 
@@ -73,16 +75,12 @@ export default function CrashPage() {
     const w = canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-
-    // Grid
     ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.lineWidth = 1;
     for (let i = 0; i < 5; i++) {
       const y = (h / 5) * i;
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
-
-    // Curve
     const grad = ctx.createLinearGradient(0, h, 0, 0);
     if (isCrashed) {
       grad.addColorStop(0, 'rgba(255,68,68,0)');
@@ -91,7 +89,6 @@ export default function CrashPage() {
       grad.addColorStop(0, 'rgba(0,212,170,0)');
       grad.addColorStop(1, 'rgba(0,212,170,0.3)');
     }
-
     const points: [number, number][] = [];
     const steps = 100;
     for (let i = 0; i <= steps; i++) {
@@ -101,7 +98,6 @@ export default function CrashPage() {
       const y = h - (val / currentMult) * h * 0.8;
       points.push([x, Math.max(10, y)]);
     }
-
     ctx.beginPath();
     ctx.moveTo(0, h);
     points.forEach(([x, y]) => ctx.lineTo(x, y));
@@ -109,7 +105,6 @@ export default function CrashPage() {
     ctx.closePath();
     ctx.fillStyle = grad;
     ctx.fill();
-
     ctx.beginPath();
     points.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
     ctx.strokeStyle = isCrashed ? '#FF4444' : '#00D4AA';
@@ -117,89 +112,97 @@ export default function CrashPage() {
     ctx.stroke();
   }, []);
 
-  const startGame = useCallback(() => {
+  const startGameHandler = useCallback(async () => {
     if (!authenticated) { login(); return; }
-    if (status === 'running') return;
-    if (betAmount <= 0 || betAmount > getDemoBalance()) return;
+    if (status === 'running' || !walletAddress) return;
+    if (betAmount <= 0 || betAmount > balance) return;
 
-    // Deduct bet
-    setBalance(adjustDemoBalance(-betAmount));
     setBalanceDelta(null);
+    setError(null);
 
-    const cp = generateCrashPoint();
-    crashRef.current = cp;
-    setCrashPoint(0);
-    setCashedOut(false);
-    setCashoutMultiplier(0);
-    setMultiplier(1.0);
-    setStatus('running');
-    setParticipants(generateParticipants());
-    startTime.current = Date.now();
+    try {
+      const response = await startGame(walletAddress, 'crash', { betAmount });
+      const cp = (response.result as { crashPoint: number })?.crashPoint ?? 2.0;
+      crashRef.current = cp;
+      setSessionId(response.sessionId);
+      setBalance(response.newBalance ?? balance - betAmount);
 
-    const tick = () => {
-      const elapsed = (Date.now() - startTime.current) / 1000;
-      const mult = Math.pow(Math.E, elapsed * 0.15);
-      const rounded = Math.floor(mult * 100) / 100;
+      setCrashPoint(0);
+      setCashedOut(false);
+      setCashoutMultiplier(0);
+      setMultiplier(1.0);
+      setStatus('running');
+      setParticipants(generateParticipants());
+      startTime.current = Date.now();
 
-      if (rounded >= crashRef.current) {
-        setMultiplier(crashRef.current);
-        setCrashPoint(crashRef.current);
-        setStatus('crashed');
-        setShake(true);
-        setTimeout(() => setShake(false), 500);
-        setBalanceDelta(-betAmount);
-        setHistory((prev) => [crashRef.current, ...prev.slice(0, 19)]);
-        drawChart(crashRef.current, true);
-        // Auto-cashout bots
+      const tick = () => {
+        const elapsed = (Date.now() - startTime.current) / 1000;
+        const mult = Math.pow(Math.E, elapsed * 0.15);
+        const rounded = Math.floor(mult * 100) / 100;
+
+        if (rounded >= crashRef.current) {
+          setMultiplier(crashRef.current);
+          setCrashPoint(crashRef.current);
+          setStatus('crashed');
+          setShake(true);
+          setTimeout(() => setShake(false), 500);
+          setBalanceDelta(-betAmount);
+          setHistory((prev) => [crashRef.current, ...prev.slice(0, 19)]);
+          drawChart(crashRef.current, true);
+          setParticipants((prev) =>
+            prev.map((p) => ({
+              ...p,
+              cashedAt: p.cashedAt || (Math.random() > 0.4 ? Math.floor(Math.random() * crashRef.current * 100) / 100 : null),
+            }))
+          );
+          window.dispatchEvent(new Event('balance-updated'));
+          return;
+        }
+
+        setMultiplier(rounded);
+        drawChart(rounded, false);
+
+        // Auto cashout check
+        const acVal = parseFloat(autoCashout);
+        if (acVal > 0 && rounded >= acVal) {
+          // Will handle cashout separately
+        }
+
         setParticipants((prev) =>
-          prev.map((p) => ({
-            ...p,
-            cashedAt: p.cashedAt || (Math.random() > 0.4 ? Math.floor(Math.random() * crashRef.current * 100) / 100 : null),
-          }))
+          prev.map((p) => !p.cashedAt && Math.random() < 0.01 ? { ...p, cashedAt: rounded } : p)
         );
-        return;
-      }
 
-      setMultiplier(rounded);
-      drawChart(rounded, false);
-
-      // Auto cashout check
-      const acVal = parseFloat(autoCashout);
-      if (acVal > 0 && rounded >= acVal && !cashedOut) {
-        setCashedOut(true);
-        setCashoutMultiplier(rounded);
-        const winAmount = betAmount * rounded;
-        setBalance(adjustDemoBalance(winAmount));
-        setBalanceDelta(winAmount - betAmount);
-      }
-
-      // Bot cashouts
-      setParticipants((prev) =>
-        prev.map((p) =>
-          !p.cashedAt && Math.random() < 0.01 ? { ...p, cashedAt: rounded } : p
-        )
-      );
-
+        animRef.current = requestAnimationFrame(tick);
+      };
       animRef.current = requestAnimationFrame(tick);
-    };
-    animRef.current = requestAnimationFrame(tick);
-  }, [authenticated, login, status, autoCashout, cashedOut, drawChart, betAmount]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro de conexao');
+      await refreshBalance();
+    }
+  }, [authenticated, login, status, autoCashout, drawChart, betAmount, walletAddress, balance, refreshBalance]);
 
   useEffect(() => {
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, []);
 
-  useEffect(() => {
-    drawChart(1.0, false);
-  }, [drawChart]);
+  useEffect(() => { drawChart(1.0, false); }, [drawChart]);
 
-  const cashOut = () => {
-    if (status !== 'running' || cashedOut) return;
+  const cashOut = async () => {
+    if (status !== 'running' || cashedOut || !sessionId) return;
     setCashedOut(true);
     setCashoutMultiplier(multiplier);
-    const winAmount = betAmount * multiplier;
-    setBalance(adjustDemoBalance(winAmount));
-    setBalanceDelta(winAmount - betAmount);
+
+    try {
+      const response = await gameCashout(sessionId, 'crash');
+      const winAmount = response.payout || betAmount * multiplier;
+      const newBal = response.newBalance ?? balance + winAmount;
+      setBalance(newBal);
+      setBalanceDelta(winAmount - betAmount);
+      window.dispatchEvent(new Event('balance-updated'));
+    } catch {
+      const winAmount = betAmount * multiplier;
+      setBalanceDelta(winAmount - betAmount);
+    }
   };
 
   const payout = cashedOut ? parseFloat(amount) * cashoutMultiplier : 0;
@@ -216,12 +219,12 @@ export default function CrashPage() {
         </h1>
         <div className="text-right">
           <p className="text-xs text-gray-500">Saldo</p>
-          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <p className="text-lg font-bold font-mono text-white">{formatUSDT(balance)}</p>
           <AnimatePresence>
             {balanceDelta !== null && status !== 'running' && (
               <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+                {balanceDelta >= 0 ? `+${formatUSDT(balanceDelta)}` : formatUSDT(balanceDelta)}
               </motion.p>
             )}
           </AnimatePresence>
@@ -229,9 +232,12 @@ export default function CrashPage() {
         <p className="text-gray-400 mt-2">Aposte e saia antes do crash. Quanto mais alto, maior o risco.</p>
       </motion.div>
 
+      {error && (
+        <div className="mb-4 p-3 rounded-xl bg-betcoin-red/10 border border-betcoin-red/20 text-betcoin-red-light text-sm">{error}</div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Chart Area */}
           <motion.div animate={shake ? { x: [-5, 5, -5, 5, 0] } : {}} transition={{ duration: 0.3 }}
             className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
@@ -249,21 +255,18 @@ export default function CrashPage() {
             <div className="relative rounded-xl overflow-hidden bg-black/30 border border-white/5">
               <canvas ref={canvasRef} width={700} height={300} className="w-full h-[300px]" />
             </div>
-
-            {/* Cashed out message */}
             <AnimatePresence>
               {cashedOut && (
                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
                   className="mt-4 text-center py-3 rounded-xl bg-betcoin-accent/10 border border-betcoin-accent/20">
                   <p className="text-xl font-bold font-mono text-betcoin-accent">
-                    Cashout em {cashoutMultiplier.toFixed(2)}x — +{formatBetCoin(payout)}
+                    Cashout em {cashoutMultiplier.toFixed(2)}x — +{formatUSDT(payout)}
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.div>
 
-          {/* Controls */}
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
@@ -272,9 +275,7 @@ export default function CrashPage() {
                 <div className="flex gap-2 flex-wrap mt-2">
                   {quickAmounts.map((val) => (
                     <Button key={val} variant="outline" size="sm" onClick={() => setAmount(val)} disabled={status === 'running'}
-                      className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>
-                      {val}
-                    </Button>
+                      className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>{val}</Button>
                   ))}
                 </div>
               </div>
@@ -289,7 +290,7 @@ export default function CrashPage() {
                 <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
               )}
               {status !== 'running' ? (
-                <Button onClick={startGame} disabled={betAmount <= 0 || betAmount > balance} size="xl" className="flex-1 text-lg font-bold">
+                <Button onClick={startGameHandler} disabled={betAmount <= 0 || betAmount > balance} size="xl" className="flex-1 text-lg font-bold">
                   <Zap className="h-5 w-5 mr-2" />
                   {authenticated ? 'Apostar' : 'Conectar para Jogar'}
                 </Button>
@@ -304,9 +305,7 @@ export default function CrashPage() {
           </div>
         </div>
 
-        {/* Right Panel */}
         <div className="space-y-6">
-          {/* History */}
           <div>
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Ultimos Resultados</h3>
             <div className="flex flex-wrap gap-1.5">
@@ -320,7 +319,6 @@ export default function CrashPage() {
             </div>
           </div>
 
-          {/* Participants */}
           <div>
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Jogadores ({participants.length})</h3>
             <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -328,7 +326,7 @@ export default function CrashPage() {
                 <div key={p.id} className="bg-white/5 border border-white/5 rounded-xl px-3 py-2 flex items-center justify-between">
                   <div>
                     <span className="text-xs text-gray-400 font-mono">{p.wallet}</span>
-                    <p className="text-xs text-gray-500">{formatBetCoin(p.bet)}</p>
+                    <p className="text-xs text-gray-500">{formatUSDT(p.bet)}</p>
                   </div>
                   {p.cashedAt ? (
                     <span className="text-xs font-mono font-bold text-betcoin-accent">{p.cashedAt.toFixed(2)}x</span>

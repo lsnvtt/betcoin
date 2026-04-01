@@ -5,13 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatBetCoin(amount: number | string): string {
+export function formatUSDT(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return '0.00 BETC';
+  if (isNaN(num)) return '0.00 USDT';
   return `${num.toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
-  })} BETC`;
+    maximumFractionDigits: 2,
+  })} USDT`;
+}
+
+/** @deprecated Use formatUSDT instead */
+export function formatBetCoin(amount: number | string): string {
+  return formatUSDT(amount);
 }
 
 export function shortenAddress(address: string): string {

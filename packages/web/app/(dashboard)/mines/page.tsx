@@ -3,10 +3,10 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { Bomb, Gem, DollarSign } from 'lucide-react';
-import { getDemoBalance, adjustDemoBalance } from '@/lib/game-config';
+import { startGame, gameAction, gameCashout, getBalance } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatBetCoin, cn } from '@/lib/utils';
+import { formatUSDT, cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const GRID_SIZE = 5;
@@ -17,7 +17,7 @@ type TileState = 'hidden' | 'gem' | 'mine';
 
 function calcMultiplier(mines: number, revealed: number): number {
   if (revealed === 0) return 1;
-  const houseEdge = 0.98; // 2% house edge
+  const houseEdge = 0.98;
   let mult = 1;
   for (let i = 0; i < revealed; i++) {
     mult *= (TOTAL_TILES - mines - i) > 0 ? (TOTAL_TILES - i) / (TOTAL_TILES - mines - i) : 1;
@@ -30,11 +30,11 @@ function calcNextMultiplier(mines: number, revealed: number): number {
 }
 
 export default function MinesPage() {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
   const [amount, setAmount] = useState('50');
   const [mineCount, setMineCount] = useState(5);
   const [grid, setGrid] = useState<TileState[]>(Array(TOTAL_TILES).fill('hidden'));
-  const [minePositions, setMinePositions] = useState<Set<number>>(new Set());
   const [playing, setPlaying] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [revealedCount, setRevealedCount] = useState(0);
@@ -42,17 +42,23 @@ export default function MinesPage() {
   const [history, setHistory] = useState<{ id: number; payout: number }[]>([]);
   const [balance, setBalance] = useState(0);
   const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { setBalance(getDemoBalance()); }, []);
+  const refreshBalance = useCallback(async () => {
+    if (!walletAddress) return;
+    try { setBalance(await getBalance(walletAddress)); } catch { /* ignore */ }
+  }, [walletAddress]);
 
+  useEffect(() => { refreshBalance(); }, [refreshBalance]);
   useEffect(() => {
-    const handler = () => setBalance(getDemoBalance());
-    window.addEventListener('demo-balance-changed', handler);
-    return () => window.removeEventListener('demo-balance-changed', handler);
-  }, []);
+    const handler = () => refreshBalance();
+    window.addEventListener('balance-updated', handler);
+    return () => window.removeEventListener('balance-updated', handler);
+  }, [refreshBalance]);
 
   const betAmount = parseFloat(amount || '0');
-
   const multiplier = useMemo(() => calcMultiplier(mineCount, revealedCount), [mineCount, revealedCount]);
   const nextMult = useMemo(() => calcNextMultiplier(mineCount, revealedCount), [mineCount, revealedCount]);
   const probability = useMemo(() => {
@@ -61,66 +67,93 @@ export default function MinesPage() {
     return remaining > 0 ? Math.floor((safe / remaining) * 100) : 0;
   }, [mineCount, revealedCount]);
 
-  const startGame = useCallback(() => {
+  const handleStartGame = useCallback(async () => {
     if (!authenticated) { login(); return; }
-    if (betAmount <= 0 || betAmount > getDemoBalance()) return;
+    if (!walletAddress || betAmount <= 0 || betAmount > balance) return;
 
-    // Deduct bet
-    setBalance(adjustDemoBalance(-betAmount));
     setBalanceDelta(null);
+    setError(null);
+    setLoading(true);
 
-    const mines = new Set<number>();
-    while (mines.size < mineCount) {
-      mines.add(Math.floor(Math.random() * TOTAL_TILES));
+    try {
+      const response = await startGame(walletAddress, 'mines', { betAmount, mineCount });
+      setSessionId(response.sessionId);
+      setBalance(response.newBalance ?? balance - betAmount);
+      setGrid(Array(TOTAL_TILES).fill('hidden'));
+      setRevealedCount(0);
+      setPlaying(true);
+      setGameOver(false);
+      setLastResult(null);
+      window.dispatchEvent(new Event('balance-updated'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro de conexao');
+      await refreshBalance();
+    } finally {
+      setLoading(false);
     }
-    setMinePositions(mines);
-    setGrid(Array(TOTAL_TILES).fill('hidden'));
-    setRevealedCount(0);
-    setPlaying(true);
-    setGameOver(false);
-    setLastResult(null);
-  }, [authenticated, login, mineCount, betAmount]);
+  }, [authenticated, login, mineCount, betAmount, walletAddress, balance, refreshBalance]);
 
-  const revealTile = useCallback((index: number) => {
-    if (!playing || gameOver || grid[index] !== 'hidden') return;
+  const revealTile = useCallback(async (index: number) => {
+    if (!playing || gameOver || grid[index] !== 'hidden' || !sessionId || loading) return;
 
-    if (minePositions.has(index)) {
-      // Hit a mine - reveal all
-      setGrid((prev) => prev.map((_, i) => minePositions.has(i) ? 'mine' : 'gem'));
-      setGameOver(true);
-      setPlaying(false);
-      const loss = -betAmount;
-      setLastResult({ won: false, payout: loss });
-      setBalanceDelta(-betAmount);
-      setHistory((prev) => [{ id: Date.now(), payout: loss }, ...prev.slice(0, 19)]);
-    } else {
-      const newRevealed = revealedCount + 1;
-      setGrid((prev) => { const g = [...prev]; g[index] = 'gem'; return g; });
-      setRevealedCount(newRevealed);
-      // Check if all safe tiles revealed
-      if (newRevealed === TOTAL_TILES - mineCount) {
-        const payoutAmount = betAmount * calcMultiplier(mineCount, newRevealed);
-        setBalance(adjustDemoBalance(payoutAmount));
-        setBalanceDelta(payoutAmount - betAmount);
+    setLoading(true);
+    try {
+      const response = await gameAction(sessionId, 'mines', 'reveal', { tileIndex: index });
+      const res = response.result as { mine: boolean; minePositions?: number[] };
+
+      if (res.mine) {
+        const minePositions = new Set(res.minePositions || []);
+        setGrid((prev) => prev.map((_, i) => minePositions.has(i) ? 'mine' : (i === index ? 'mine' : (prev[i] === 'gem' ? 'gem' : 'gem'))));
         setGameOver(true);
         setPlaying(false);
-        setLastResult({ won: true, payout: payoutAmount });
-        setHistory((prev) => [{ id: Date.now(), payout: payoutAmount }, ...prev.slice(0, 19)]);
-      }
-    }
-  }, [playing, gameOver, grid, minePositions, revealedCount, amount, mineCount, betAmount]);
+        const loss = -betAmount;
+        setLastResult({ won: false, payout: loss });
+        setBalanceDelta(-betAmount);
+        setBalance(response.newBalance ?? balance);
+        setHistory((prev) => [{ id: Date.now(), payout: loss }, ...prev.slice(0, 19)]);
+        window.dispatchEvent(new Event('balance-updated'));
+      } else {
+        const newRevealed = revealedCount + 1;
+        setGrid((prev) => { const g = [...prev]; g[index] = 'gem'; return g; });
+        setRevealedCount(newRevealed);
 
-  const cashOut = useCallback(() => {
-    if (!playing || gameOver || revealedCount === 0) return;
-    const payoutAmount = betAmount * multiplier;
-    setBalance(adjustDemoBalance(payoutAmount));
-    setBalanceDelta(payoutAmount - betAmount);
-    setPlaying(false);
-    setGameOver(true);
-    setGrid((prev) => prev.map((s, i) => s === 'hidden' ? (minePositions.has(i) ? 'mine' : 'gem') : s));
-    setLastResult({ won: true, payout: payoutAmount });
-    setHistory((prev) => [{ id: Date.now(), payout: payoutAmount }, ...prev.slice(0, 19)]);
-  }, [playing, gameOver, revealedCount, betAmount, multiplier, minePositions]);
+        if (newRevealed === TOTAL_TILES - mineCount) {
+          const payoutAmount = response.payout || betAmount * calcMultiplier(mineCount, newRevealed);
+          setBalance(response.newBalance ?? balance + payoutAmount);
+          setBalanceDelta(payoutAmount - betAmount);
+          setGameOver(true);
+          setPlaying(false);
+          setLastResult({ won: true, payout: payoutAmount });
+          setHistory((prev) => [{ id: Date.now(), payout: payoutAmount }, ...prev.slice(0, 19)]);
+          window.dispatchEvent(new Event('balance-updated'));
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro de conexao');
+    } finally {
+      setLoading(false);
+    }
+  }, [playing, gameOver, grid, sessionId, revealedCount, mineCount, betAmount, balance, loading]);
+
+  const handleCashOut = useCallback(async () => {
+    if (!playing || gameOver || revealedCount === 0 || !sessionId) return;
+    setLoading(true);
+    try {
+      const response = await gameCashout(sessionId, 'mines');
+      const payoutAmount = response.payout || betAmount * multiplier;
+      setBalance(response.newBalance ?? balance + payoutAmount);
+      setBalanceDelta(payoutAmount - betAmount);
+      setPlaying(false);
+      setGameOver(true);
+      setLastResult({ won: true, payout: payoutAmount });
+      setHistory((prev) => [{ id: Date.now(), payout: payoutAmount }, ...prev.slice(0, 19)]);
+      window.dispatchEvent(new Event('balance-updated'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro de conexao');
+    } finally {
+      setLoading(false);
+    }
+  }, [playing, gameOver, revealedCount, betAmount, multiplier, sessionId, balance]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto">
@@ -134,12 +167,12 @@ export default function MinesPage() {
         </h1>
         <div className="text-right">
           <p className="text-xs text-gray-500">Saldo</p>
-          <p className="text-lg font-bold font-mono text-white">{formatBetCoin(balance)}</p>
+          <p className="text-lg font-bold font-mono text-white">{formatUSDT(balance)}</p>
           <AnimatePresence>
             {balanceDelta !== null && !playing && (
               <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className={cn('text-xs font-mono font-bold', balanceDelta >= 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                {balanceDelta >= 0 ? `+${formatBetCoin(balanceDelta)}` : formatBetCoin(balanceDelta)}
+                {balanceDelta >= 0 ? `+${formatUSDT(balanceDelta)}` : formatUSDT(balanceDelta)}
               </motion.p>
             )}
           </AnimatePresence>
@@ -147,9 +180,12 @@ export default function MinesPage() {
         <p className="text-gray-400 mt-2">Campo minado cripto. Revele gemas e evite as minas.</p>
       </motion.div>
 
+      {error && (
+        <div className="mb-4 p-3 rounded-xl bg-betcoin-red/10 border border-betcoin-red/20 text-betcoin-red-light text-sm">{error}</div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Multiplier Display */}
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -163,26 +199,21 @@ export default function MinesPage() {
               </div>
             </div>
 
-            {/* Grid */}
             <div className="grid grid-cols-5 gap-2 mb-6">
               {grid.map((tile, i) => (
-                <motion.button
-                  key={i}
+                <motion.button key={i}
                   whileHover={tile === 'hidden' && playing ? { scale: 1.05 } : {}}
                   whileTap={tile === 'hidden' && playing ? { scale: 0.95 } : {}}
                   onClick={() => revealTile(i)}
-                  disabled={!playing || tile !== 'hidden'}
+                  disabled={!playing || tile !== 'hidden' || loading}
                   className={cn(
                     'aspect-square rounded-xl flex items-center justify-center text-2xl border-2 transition-all',
                     tile === 'hidden' && 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10 cursor-pointer',
                     tile === 'gem' && 'border-betcoin-accent/30 bg-betcoin-accent/10',
                     tile === 'mine' && 'border-betcoin-red/30 bg-betcoin-red/10'
-                  )}
-                >
+                  )}>
                   <AnimatePresence mode="wait">
-                    {tile === 'hidden' && (
-                      <motion.span key="hidden" className="text-gray-600 text-lg">?</motion.span>
-                    )}
+                    {tile === 'hidden' && <motion.span key="hidden" className="text-gray-600 text-lg">?</motion.span>}
                     {tile === 'gem' && (
                       <motion.div key="gem" initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', damping: 12 }}>
                         <Gem className="h-6 w-6 text-betcoin-accent" />
@@ -198,20 +229,18 @@ export default function MinesPage() {
               ))}
             </div>
 
-            {/* Result */}
             <AnimatePresence>
               {lastResult && (
                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
                   className={cn('text-center py-3 rounded-xl mb-4 border',
                     lastResult.won ? 'bg-betcoin-accent/10 border-betcoin-accent/20' : 'bg-betcoin-red/10 border-betcoin-red/20')}>
                   <p className={cn('text-2xl font-bold font-mono', lastResult.won ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                    {lastResult.won ? `+${formatBetCoin(lastResult.payout)}` : formatBetCoin(lastResult.payout)}
+                    {lastResult.won ? `+${formatUSDT(lastResult.payout)}` : formatUSDT(lastResult.payout)}
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Controls */}
             <div className="space-y-3 mb-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -220,16 +249,13 @@ export default function MinesPage() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 font-medium mb-2 block">Numero de Minas ({mineCount})</label>
-                  <input type="range" min={1} max={24} value={mineCount} onChange={(e) => setMineCount(Number(e.target.value))} disabled={playing}
-                    className="w-full accent-betcoin-primary" />
+                  <input type="range" min={1} max={24} value={mineCount} onChange={(e) => setMineCount(Number(e.target.value))} disabled={playing} className="w-full accent-betcoin-primary" />
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap">
                 {quickAmounts.map((val) => (
                   <Button key={val} variant="outline" size="sm" onClick={() => setAmount(val)} disabled={playing}
-                    className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>
-                    {val}
-                  </Button>
+                    className={cn('text-xs font-mono', amount === val && 'border-betcoin-primary/50 text-betcoin-primary')}>{val}</Button>
                 ))}
               </div>
             </div>
@@ -239,20 +265,19 @@ export default function MinesPage() {
                 <p className="text-xs text-betcoin-red-light mb-2 text-center">Saldo insuficiente</p>
               )}
               {!playing ? (
-                <Button onClick={startGame} disabled={betAmount <= 0 || betAmount > balance} size="xl" className="flex-1 text-lg font-bold">
+                <Button onClick={handleStartGame} disabled={betAmount <= 0 || betAmount > balance || loading} loading={loading} size="xl" className="flex-1 text-lg font-bold">
                   {authenticated ? 'Iniciar Jogo' : 'Conectar para Jogar'}
                 </Button>
               ) : (
-                <Button onClick={cashOut} variant="success" size="xl" disabled={revealedCount === 0} className="flex-1 text-lg font-bold">
+                <Button onClick={handleCashOut} variant="success" size="xl" disabled={revealedCount === 0 || loading} loading={loading} className="flex-1 text-lg font-bold">
                   <DollarSign className="h-5 w-5 mr-1" />
-                  Cash Out ({formatBetCoin(parseFloat(amount) * multiplier)})
+                  Cash Out ({formatUSDT(parseFloat(amount) * multiplier)})
                 </Button>
               )}
             </div>
           </div>
         </div>
 
-        {/* History */}
         <div className="space-y-4">
           <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Historico</h3>
           <div className="flex flex-wrap gap-1.5 mb-4">
@@ -271,7 +296,7 @@ export default function MinesPage() {
                   <span className="text-xs text-gray-400">Mines</span>
                 </div>
                 <span className={cn('text-xs font-mono font-semibold', entry.payout > 0 ? 'text-betcoin-accent' : 'text-betcoin-red-light')}>
-                  {entry.payout > 0 ? `+${formatBetCoin(entry.payout)}` : formatBetCoin(entry.payout)}
+                  {entry.payout > 0 ? `+${formatUSDT(entry.payout)}` : formatUSDT(entry.payout)}
                 </span>
               </motion.div>
             ))}
