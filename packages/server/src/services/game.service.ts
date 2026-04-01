@@ -56,7 +56,7 @@ async function nextNonce(wallet: string, game: string): Promise<number> {
   return (await redis.incr(nonceKey(wallet, game))) as number;
 }
 
-async function saveSession(session: GameSession): Promise<void> {
+export async function saveSession(session: GameSession): Promise<void> {
   await redis.set(
     sessionKey(session.id),
     JSON.stringify(session),
@@ -151,6 +151,14 @@ export async function startGame(params: StartGameParams): Promise<StartGameResul
   // For instant games, resolve immediately
   if (['coinflip', 'dice', 'slots', 'roulette'].includes(gameType)) {
     return resolveInstantGame(session, serverSeed, gameParams, newBalanceCents);
+  }
+
+  // For crash: pre-calculate crash point, store server-side ONLY (never sent to client)
+  if (gameType === 'crash') {
+    const hash = pf.generateResult(serverSeed, cs, nonce);
+    const crashPoint = pf.crashResult(hash);
+    session.result = { ...gameParams, _crashPoint: crashPoint, startedAt: Date.now() };
+    await saveSession(session);
   }
 
   return {

@@ -297,6 +297,77 @@ export async function gamesRoutes(app: FastifyInstance) {
   );
 
   /**
+   * GET /api/games/crash/tick/:sessionId
+   * Crash game tick — returns current multiplier based on elapsed time.
+   * Frontend polls this every 100-200ms. Never exposes crash point.
+   */
+  app.get(
+    '/api/games/crash/tick/:sessionId',
+    async (request, reply) => {
+      const { sessionId } = request.params as { sessionId: string };
+
+      try {
+        const session = await gameService.getSession(sessionId);
+        if (!session) return reply.status(404).send({ error: 'Session not found' });
+        if (session.game !== 'crash') return reply.status(400).send({ error: 'Not a crash game' });
+
+        const state = session.result as Record<string, unknown>;
+        const crashPoint = state['_crashPoint'] as number;
+        const startedAt = state['startedAt'] as number;
+
+        if (session.status === 'completed') {
+          return reply.send({
+            status: 'crashed',
+            crashPoint,
+            multiplier: crashPoint,
+            payout: session.payout,
+          });
+        }
+
+        // Calculate current multiplier based on elapsed time
+        // Multiplier grows exponentially: 1.0 * e^(0.06 * elapsedSeconds)
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const currentMultiplier = Math.floor(Math.exp(0.06 * elapsed) * 100) / 100;
+
+        if (currentMultiplier >= crashPoint) {
+          // Crash! Finalize the game
+          session.status = 'completed';
+          state['crashedAt'] = Date.now();
+          session.result = state;
+
+          // If player had auto-cashout below crash point, they win
+          const cashoutAt = state['cashoutAt'] as number | undefined;
+          if (cashoutAt && cashoutAt <= crashPoint) {
+            const payoutCents = Math.round(session.betAmount * cashoutAt);
+            session.payout = payoutCents;
+            await balanceService.addBalance(session.walletAddress, payoutCents);
+          }
+
+          await gameService.saveSession(session);
+
+          return reply.send({
+            status: 'crashed',
+            crashPoint,
+            multiplier: crashPoint,
+            payout: session.payout,
+            newBalance: balanceService.centsToDollars(
+              await balanceService.getBalanceCents(session.walletAddress)
+            ),
+          });
+        }
+
+        return reply.send({
+          status: 'running',
+          multiplier: currentMultiplier,
+        });
+      } catch (err) {
+        request.log.error(err, 'Crash tick failed');
+        return reply.status(500).send({ error: 'Internal Server Error' });
+      }
+    },
+  );
+
+  /**
    * GET /api/games/:gameType/history
    * Game history — wallet-based lookup from Redis sessions (no Prisma dependency).
    */
