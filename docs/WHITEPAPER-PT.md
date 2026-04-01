@@ -327,13 +327,13 @@ A plataforma é **auto-sustentável** desde o primeiro dia de operação:
 #### Passo 2: Configurar Wallet
 - Ao conectar no BetCoin, o Privy cria uma wallet automaticamente
 - Você também pode usar MetaMask ou qualquer wallet EVM
-- A wallet funciona na rede Polygon (MATIC para gas)
+- A wallet funciona na rede Polygon (POL para gas)
 
 #### Passo 3: Enviar USDT para sua Wallet
 - Copie o endereço da sua wallet (aparece no header do site)
 - Na exchange, faça saque de USDT para esse endereço
 - **Rede**: selecione **Polygon** (não Ethereum, não BSC)
-- Gas: tenha ~0.1 MATIC para pagar taxas (~$0.05)
+- Gas: tenha ~0.1 POL para pagar taxas (~$0.05)
 
 #### Passo 4: Depositar no BetCoin
 - No site, clique "Depositar"
